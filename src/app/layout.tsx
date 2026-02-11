@@ -1,16 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
-
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  variable: "--font-jetbrains-mono",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "GUESS IT | Cyber Arcade",
@@ -24,12 +13,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="id">
-      <body
-        className={`${inter.variable} ${jetbrainsMono.variable} antialiased`}
-      >
+      <body>
         <div className="grid-overlay"></div>
         <div className="scanlines"></div>
         <div id="screen-flash" className="screen-flash"></div>
+
         <main className="main-wrapper">
           {children}
         </main>
