@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GUESS IT | Cyber Arcade</title>
+    <link rel="stylesheet" href="game.css">
+</head>
+
+<body>
+
+    <!-- Atmospheric Elements -->
+    <div class="grid-overlay"></div>
+    <div class="scanlines"></div>
+    <div id="screen-flash" class="screen-flash"></div>
+
+    <div class="main-wrapper">
+
+        <header class="nav-header">
+            <button id="back-btn" class="back-btn" onclick="goBack()">Kembali</button>
+        </header>
+
+        <!-- Section: Main Menu -->
+        <section id="page-menu" class="active">
+            <h1>GUESS<br>IT.</h1>
+            <p class="subtitle">&gt; ASAH_LOGIKA_&_INSTING</p>
+            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                <button class="btn btn-primary" onclick="showPage('page-difficulty')">MULAI MAIN</button>
+                <button class="btn" onclick="showLeaderboard()">SKOR TERTINGGI</button>
+                <button class="btn btn-small" style="margin-top: 1rem; opacity: 0.6;"
+                    onclick="showPage('page-login')">LOGIN</button>
+            </div>
+        </section>
+
+        <!-- Section: Difficulty Selection -->
+        <section id="page-difficulty">
+            <h1>LEVEL.</h1>
+            <p class="subtitle">&gt; PILIH_LEVEL</p>
+            <div class="diff-list">
+                <div class="diff-btn" onclick="startGame('easy')">
+                    <span class="diff-name">MUDAH</span>
+                    <span class="diff-info">1-10 [5_NYAWA]</span>
+                </div>
+                <div class="diff-btn" onclick="startGame('medium')">
+                    <span class="diff-name">SEDANG</span>
+                    <span class="diff-info">1-50 [7_NYAWA]</span>
+                </div>
+                <div class="diff-btn" onclick="startGame('hard')">
+                    <span class="diff-name">SULIT</span>
+                    <span class="diff-info">1-100 [10_NYAWA]</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section: Game Play -->
+        <section id="page-game">
+            <div id="bg-target" class="bg-number">0</div>
+            <div class="hearts-container" id="hearts-container">
+                <!-- SVG Hearts injected via JS -->
+            </div>
+
+            <div class="stat-row">
+                <div class="stat-cell">
+                    <span class="stat-label">RANGE_MIN</span>
+                    <span id="low-display" class="stat-value">0</span>
+                </div>
+                <div class="stat-cell">
+                    <span class="stat-label">RANGE_MAX</span>
+                    <span id="high-display" class="stat-value">0</span>
+                </div>
+            </div>
+
+            <div class="feedback-area" id="feedback-msg"></div>
+
+            <div class="input-section">
+                <input type="number" id="guess-input" placeholder="00" min="1" max="100">
+            </div>
+
+            <button class="btn btn-primary" style="width: 100%; margin-bottom: 2rem;" onclick="checkGuess()">TEBAK
+                ANGKA</button>
+
+            <div class="history-bar" id="history-list">
+                <!-- History tags injected here -->
+            </div>
+        </section>
+
+        <!-- Section: Results -->
+        <section id="page-result">
+            <div id="result-content">
+                <!-- Injected via JS -->
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 2rem;">
+                <button class="btn btn-primary" onclick="showPage('page-difficulty')">MAIN LAGI</button>
+                <button class="btn" onclick="showPage('page-menu')">MENU UTAMA</button>
+            </div>
+        </section>
+
+        <!-- Section: Leaderboard -->
+        <section id="page-leaderboard">
+            <h1>JUARA.</h1>
+            <p class="subtitle">&gt; TOP_5_PLAYERS</p>
+
+            <div id="leaderboard-content" class="leaderboard-list">
+                <!-- Scores injected here -->
+            </div>
+
+            <button class="btn btn-primary" style="margin-top: 2rem;" onclick="showPage('page-menu', true)">KEMBALI KE
+                MENU</button>
+        </section>
+
+        <!-- Section: Login -->
+        <section id="page-login">
+            <h1>LOGIN.</h1>
+            <p class="subtitle">&gt; AKSES_KE_SISTEM</p>
+
+            <div class="login-form">
+                <div class="input-group">
+                    <label>USERNAME</label>
+                    <input type="text" id="login-username" placeholder="cyber_pilot_01">
+                </div>
+                <div class="input-group">
+                    <label>PASSWORD</label>
+                    <input type="password" id="login-password" placeholder="••••••••">
+                </div>
+                <button class="btn btn-primary" style="width: 100%; margin-top: 1rem;"
+                    onclick="handleLogin()">OTENTIKASI</button>
+            </div>
+        </section>
+
+    </div>
+
+    <script src="game.js"></script>
+</body>
+
+</html>

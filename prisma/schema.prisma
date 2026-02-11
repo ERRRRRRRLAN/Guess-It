@@ -1,0 +1,16 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Score {
+  id         String   @id @default(cuid())
+  name       String
+  attempts   Int
+  difficulty String
+  createdAt  DateTime @default(now())
+}
