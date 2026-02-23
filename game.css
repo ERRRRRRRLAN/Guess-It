@@ -1166,3 +1166,25 @@ input:focus, #player-name:focus {
     margin: -0.25rem 0 0 0;
     opacity: 0.8;
 }
+
+/* ============================================
+   BGM TOGGLE
+   ============================================ */
+.bgm-toggle {
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 0.4rem 0.6rem;
+    font-size: 1rem;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.bgm-toggle:hover {
+    border-color: var(--neon-cyan);
+    box-shadow: 0 0 8px rgba(0, 255, 255, 0.2);
+}

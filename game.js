@@ -106,7 +106,41 @@ const userAuth = {
 document.addEventListener('DOMContentLoaded', () => {
     userAuth.checkSession();
     initPresence();
+    initBGM();
 });
+
+// ============================================================
+// BACKGROUND MUSIC
+// ============================================================
+let bgmPlaying = false;
+
+function initBGM() {
+    const bgm = document.getElementById('bgm');
+    bgm.volume = 0.3;
+
+    // Auto-play on first user interaction (browser policy)
+    const startBGM = () => {
+        bgm.play().then(() => {
+            bgmPlaying = true;
+            document.getElementById('bgm-toggle').innerText = '🔊';
+        }).catch(() => {});
+        document.removeEventListener('click', startBGM);
+    };
+    document.addEventListener('click', startBGM);
+}
+
+function toggleBGM() {
+    const bgm = document.getElementById('bgm');
+    if (bgmPlaying) {
+        bgm.pause();
+        bgmPlaying = false;
+        document.getElementById('bgm-toggle').innerText = '🔇';
+    } else {
+        bgm.play();
+        bgmPlaying = true;
+        document.getElementById('bgm-toggle').innerText = '🔊';
+    }
+}
 
 // ============================================================
 // ONLINE PRESENCE TRACKING
