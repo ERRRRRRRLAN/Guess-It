@@ -811,3 +811,180 @@ input:focus, #player-name:focus {
     font-family: var(--font-data);
     margin-bottom: 0.5rem;
 }
+
+/* ============================================
+   STOPWATCH
+   ============================================ */
+.stopwatch {
+    font-family: var(--font-data);
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--neon-cyan);
+    text-align: center;
+    letter-spacing: 3px;
+    text-shadow: 0 0 15px rgba(0, 242, 255, 0.5), 0 0 30px rgba(0, 242, 255, 0.2);
+    margin-bottom: 1rem;
+    padding: 0.5rem;
+    border: 1px solid rgba(0, 242, 255, 0.15);
+    background: rgba(0, 242, 255, 0.03);
+}
+
+/* ============================================
+   LEADERBOARD TABS
+   ============================================ */
+.leaderboard-tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.lb-tab {
+    flex: 1;
+    padding: 0.75rem;
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    font-family: var(--font-data);
+    font-size: 0.75rem;
+    letter-spacing: 2px;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.lb-tab.active {
+    background: rgba(0, 242, 255, 0.1);
+    color: var(--neon-cyan);
+    border-bottom: 2px solid var(--neon-cyan);
+    text-shadow: 0 0 10px rgba(0, 242, 255, 0.5);
+}
+
+.lb-tab:hover:not(.active) {
+    background: rgba(255, 255, 255, 0.03);
+    color: #fff;
+}
+
+/* ============================================
+   DUEL ARENA
+   ============================================ */
+.duel-arena {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    background: var(--bg-deep);
+    padding: 1rem;
+    overflow-y: auto;
+}
+
+.duel-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 1rem;
+    margin-bottom: 1rem;
+}
+
+.duel-vs-label {
+    font-family: var(--font-main);
+    font-size: 1.5rem;
+    font-weight: 900;
+    color: var(--neon-magenta);
+    text-shadow: 0 0 20px rgba(255, 0, 255, 0.5), 0 0 40px rgba(255, 0, 255, 0.2);
+    letter-spacing: 4px;
+}
+
+.duel-panels {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    align-items: flex-start;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.duel-panel {
+    flex: 1;
+    max-width: 480px;
+    background: var(--bg-panel);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    padding: 2rem 1.5rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.duel-panel::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--neon-cyan), var(--neon-magenta), transparent);
+}
+
+.duel-player-label {
+    font-family: var(--font-data);
+    font-size: 0.8rem;
+    letter-spacing: 3px;
+    color: var(--neon-magenta);
+    text-align: center;
+    margin-bottom: 1rem;
+    text-shadow: 0 0 10px rgba(255, 0, 255, 0.4);
+}
+
+.duel-panel .stopwatch {
+    font-size: 1.4rem;
+}
+
+.duel-panel .stat-row {
+    margin-bottom: 0.5rem;
+}
+
+.duel-panel .btn {
+    margin-bottom: 0.75rem;
+}
+
+.duel-panel.finished {
+    opacity: 0.5;
+    pointer-events: none;
+    filter: grayscale(0.6);
+}
+
+.duel-panel.winner {
+    border-color: var(--neon-cyan);
+    box-shadow: 0 0 20px rgba(0, 242, 255, 0.2), 0 0 40px rgba(0, 242, 255, 0.1);
+}
+
+/* ============================================
+   DUEL RESULT OVERLAY
+   ============================================ */
+.duel-result-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    background: rgba(10, 10, 12, 0.95);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(10px);
+}
+
+.duel-result-overlay .main-wrapper {
+    display: block !important;
+}
+
+/* ============================================
+   RESPONSIVE — DUEL
+   ============================================ */
+@media (max-width: 768px) {
+    .duel-panels {
+        flex-direction: column;
+        align-items: center;
+    }
+    .duel-panel {
+        max-width: 100%;
+        width: 100%;
+    }
+}

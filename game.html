@@ -16,7 +16,7 @@
     <div id="screen-flash" class="screen-flash"></div>
     <div class="noise-overlay"></div>
 
-    <div class="main-wrapper">
+    <div class="main-wrapper" id="main-wrapper-solo">
         
         <header class="nav-header">
             <button id="back-btn" class="back-btn" onclick="goBack()">Kembali</button>
@@ -25,13 +25,14 @@
         <!-- Section: Main Menu -->
         <section id="page-menu" class="active">
             <h1>GUESS<br>IT.</h1>
-            <p class="subtitle">&gt; ASAH_LOGIKA_&_INSTING</p>
+            <p class="subtitle">&gt; ASAH_LOGIKA_&amp;_INSTING</p>
             <div id="user-profile" class="user-profile">
                 <span id="display-username">GUEST</span>
                 <button class="logout-btn" onclick="userAuth.logout()">LOGOUT</button>
             </div>
             <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-                <button class="btn btn-primary" id="play-btn" onclick="showPage('page-difficulty')">MULAI MAIN</button>
+                <button class="btn btn-primary" onclick="selectMode('solo')">SOLO</button>
+                <button class="btn btn-primary" onclick="selectMode('duel')">DUEL</button>
                 <div id="auth-actions" style="display: none; flex-direction: column; gap: 0.75rem;">
                     <button class="btn btn-outline" onclick="showPage('page-login')">LOGIN</button>
                 </div>
@@ -63,10 +64,10 @@
             </div>
         </section>
 
-        <!-- Section: Difficulty Selection -->
+        <!-- Section: Difficulty Selection (Solo) -->
         <section id="page-difficulty">
             <h1>LEVEL.</h1>
-            <p class="subtitle">&gt; PILIH_LEVEL</p>
+            <p class="subtitle" id="diff-subtitle">&gt; PILIH_LEVEL</p>
             <div class="diff-list">
                 <div class="diff-btn" onclick="startGame('easy')">
                     <span class="diff-name">MUDAH</span>
@@ -83,12 +84,11 @@
             </div>
         </section>
 
-        <!-- Section: Game Play -->
+        <!-- Section: Solo Game Play -->
         <section id="page-game">
-            <!-- Target number hidden — jangan tampilkan di layar -->
-            <div class="hearts-container" id="hearts-container">
-                <!-- SVG Hearts injected via JS -->
-            </div>
+            <div class="stopwatch" id="stopwatch">00:00.0</div>
+
+            <div class="hearts-container" id="hearts-container"></div>
 
             <div class="stat-row">
                 <div class="stat-cell">
@@ -109,16 +109,12 @@
 
             <button class="btn btn-primary" style="width: 100%; margin-bottom: 2rem;" onclick="checkGuess()">TEBAK ANGKA</button>
 
-            <div class="history-bar" id="history-list">
-                <!-- History tags injected here -->
-            </div>
+            <div class="history-bar" id="history-list"></div>
         </section>
 
         <!-- Section: Results -->
         <section id="page-result">
-            <div id="result-content">
-                <!-- Injected via JS -->
-            </div>
+            <div id="result-content"></div>
             
             <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 2rem;">
                 <button class="btn btn-primary" onclick="showPage('page-difficulty')">MAIN LAGI</button>
@@ -129,15 +125,85 @@
         <!-- Section: Leaderboard -->
         <section id="page-leaderboard">
             <h1>JUARA.</h1>
-            <p class="subtitle">&gt; TOP_5_PLAYERS</p>
+            <p class="subtitle">&gt; TOP_PLAYERS</p>
             
-            <div id="leaderboard-content" class="leaderboard-list">
-                <!-- Scores injected here -->
+            <div class="leaderboard-tabs">
+                <button class="lb-tab active" id="lb-tab-solo" onclick="switchLeaderboardTab('solo')">SOLO</button>
+                <button class="lb-tab" id="lb-tab-duel" onclick="switchLeaderboardTab('duel')">DUEL</button>
             </div>
+
+            <div id="leaderboard-content" class="leaderboard-list"></div>
 
             <button class="btn btn-primary" style="margin-top: 2rem;" onclick="showPage('page-menu')">KEMBALI KE MENU</button>
         </section>
 
+    </div>
+
+    <!-- Duel Arena (outside main-wrapper, full-width) -->
+    <div class="duel-arena" id="duel-arena" style="display:none;">
+        <header class="nav-header duel-nav">
+            <button class="back-btn visible" onclick="exitDuel()">Kembali</button>
+            <div class="duel-vs-label">VS</div>
+        </header>
+
+        <div class="duel-panels">
+            <!-- Player 1 Panel -->
+            <div class="duel-panel" id="duel-p1">
+                <h2 class="duel-player-label">PLAYER 1</h2>
+                <div class="stopwatch" id="stopwatch-p1">00:00.0</div>
+                <div class="hearts-container" id="hearts-p1"></div>
+                <div class="stat-row">
+                    <div class="stat-cell">
+                        <span class="stat-label">MIN</span>
+                        <span class="stat-value" id="low-p1">0</span>
+                    </div>
+                    <div class="stat-cell">
+                        <span class="stat-label">MAX</span>
+                        <span class="stat-value" id="high-p1">0</span>
+                    </div>
+                </div>
+                <div class="feedback-area" id="feedback-p1"></div>
+                <div class="input-section">
+                    <input type="number" id="guess-p1" placeholder="00">
+                </div>
+                <button class="btn btn-primary" style="width:100%;" onclick="checkDuelGuess(1)">TEBAK</button>
+                <div class="history-bar" id="history-p1"></div>
+            </div>
+
+            <!-- Player 2 Panel -->
+            <div class="duel-panel" id="duel-p2">
+                <h2 class="duel-player-label">PLAYER 2</h2>
+                <div class="stopwatch" id="stopwatch-p2">00:00.0</div>
+                <div class="hearts-container" id="hearts-p2"></div>
+                <div class="stat-row">
+                    <div class="stat-cell">
+                        <span class="stat-label">MIN</span>
+                        <span class="stat-value" id="low-p2">0</span>
+                    </div>
+                    <div class="stat-cell">
+                        <span class="stat-label">MAX</span>
+                        <span class="stat-value" id="high-p2">0</span>
+                    </div>
+                </div>
+                <div class="feedback-area" id="feedback-p2"></div>
+                <div class="input-section">
+                    <input type="number" id="guess-p2" placeholder="00">
+                </div>
+                <button class="btn btn-primary" style="width:100%;" onclick="checkDuelGuess(2)">TEBAK</button>
+                <div class="history-bar" id="history-p2"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Duel Result Overlay -->
+    <div class="duel-result-overlay" id="duel-result-overlay" style="display:none;">
+        <div class="main-wrapper" style="max-width:500px;">
+            <div id="duel-result-content"></div>
+            <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 2rem;">
+                <button class="btn btn-primary" onclick="exitDuel(); selectMode('duel');">DUEL LAGI</button>
+                <button class="btn" onclick="exitDuel(); showPage('page-menu');">MENU UTAMA</button>
+            </div>
+        </div>
     </div>
 
     <script src="game.js"></script>
