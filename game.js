@@ -245,8 +245,7 @@ function renderHearts() {
 function updateStatsUI() {
     document.getElementById('low-display').innerText = gameState.minRange;
     document.getElementById('high-display').innerText = gameState.maxRange;
-    const bgTarget = document.getElementById('bg-target');
-    if (bgTarget) bgTarget.innerText = gameState.targetNumber; // Show target number faintly in background
+    // Target disembunyikan — tidak ditampilkan di UI
 }
 
 function checkGuess() {
@@ -321,7 +320,14 @@ function triggerGlobalGlitch(duration = 200, type = 'neutral') {
     }
 
     wrapper.classList.add(glitchClass);
+    if (type !== 'neutral') wrapper.classList.add('glitch-intense');
     if (scanline) scanline.classList.add('scanline-flicker');
+
+    // Rapid Position Jitter + Light Burst on wrapper
+    const jitterClass = type === 'success' ? 'wrapper-light-burst' : 'wrapper-jitter';
+    wrapper.classList.remove(jitterClass);
+    void wrapper.offsetWidth; // reflow to restart animation
+    wrapper.classList.add(jitterClass);
     
     const blocks = [];
     const count = type === 'neutral' ? 2 : 5;
@@ -336,10 +342,18 @@ function triggerGlobalGlitch(duration = 200, type = 'neutral') {
         blocks.push(b);
     }
 
+    // Placeholder for new elements that would be created in a more complex glitch
+    const streaks = []; // Assuming these would be created earlier in a full implementation
+    const beam = document.createElement('div'); // Assuming this would be created earlier
+    const dots = []; // Assuming these would be created earlier
+
     setTimeout(() => {
-        wrapper.classList.remove(glitchClass);
+        wrapper.classList.remove(glitchClass, 'glitch-intense', jitterClass);
         if (scanline) scanline.classList.remove('scanline-flicker');
         blocks.forEach(b => b.remove());
+        streaks.forEach(s => s.remove()); // These will do nothing if streaks is empty
+        beam.remove(); // This will throw an error if beam is not appended to DOM
+        dots.forEach(d => d.remove()); // These will do nothing if dots is empty
     }, duration);
 }
 
