@@ -245,6 +245,12 @@ function checkGuess() {
         const elapsed = stopTimer(soloTimer);
         const sp = calcPoints(elapsed, gameState.wrongGuesses, gameState.difficulty);
         triggerFlash('flash-cyan'); triggerGlobalGlitch(400, 'success');
+
+        // Auto-save SP for logged-in users
+        if (gameState.currentUser) {
+            saveScore(gameState.difficulty, gameState.history.length, gameState.currentUser.toUpperCase(), 'solo', sp, Math.round(elapsed));
+        }
+
         showSoloResult(true, elapsed, sp);
     } else {
         gameState.currentLives--; gameState.wrongGuesses++;
@@ -289,14 +295,11 @@ function showSoloResult(isWin, timeSec, points) {
     if (isWin) {
         const attempts = gameState.history.length;
         const timeStr = formatTime(timeSec);
-        const pointsDisplay = `<div class="win-text-small" style="font-size:1.5rem; color:var(--neon-magenta); margin:0.5rem 0;">${points} SP</div>`;
+        const pointsDisplay = `<div class="win-text-small" style="font-size:1.5rem; color:var(--neon-magenta); margin:0.5rem 0;">+${points} SP</div>`;
         const statsDisplay = `<div class="win-text-small">${attempts} tebakan · ${timeStr} · ${gameState.wrongGuesses} salah · ×${difficulties[gameState.difficulty].multiplier}</div>`;
         if (gameState.currentUser) {
             extraInfo = `${pointsDisplay}${statsDisplay}
-                <div class="name-entry-area">
-                    <input type="text" id="player-name" value="${gameState.currentUser.toUpperCase()}" placeholder="MASUKKAN NAMA" maxlength="10">
-                    <button class="btn btn-primary" id="save-score-btn" onclick="handleSaveScore(${Math.round(timeSec)}, ${points})">SIMPAN REKOR</button>
-                </div>`;
+                <div class="win-text-small" style="color:var(--neon-cyan); margin-top:0.75rem;">&gt; POIN_DITAMBAHKAN_KE_TOTAL_SP</div>`;
         } else {
             extraInfo = `${pointsDisplay}${statsDisplay}
                 <div class="guest-notice"><p>&gt; DAFTAR_LOGIN_UNTUK_SIMPAN_SKOR</p>
