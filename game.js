@@ -1,7 +1,7 @@
 // Supabase Configuration (REPLACE WITH YOUR KEYS)
 const SUPABASE_URL = 'https://pfzdtwvsghdwchrmogap.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBmemR0d3ZzZ2hkd2Nocm1vZ2FwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA4MDM1MzgsImV4cCI6MjA4NjM3OTUzOH0.dfD5GF7luaWCJ_nL-kjMIh51D143fw93mbgsIDYutUQ';
-const supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 // Game State
 let gameState = {
@@ -29,7 +29,7 @@ const userAuth = {
             return;
         }
         
-        const { data, error } = await supabase.auth.signUp({
+        const { data, error } = await supabaseClient.auth.signUp({
             email: `${user}@guessit.game`, // Mock email for simple username login
             password: pass,
             options: {
@@ -50,7 +50,7 @@ const userAuth = {
         const user = document.getElementById('login-user').value.trim();
         const pass = document.getElementById('login-pass').value.trim();
         
-        const { data, error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabaseClient.auth.signInWithPassword({
             email: `${user}@guessit.game`,
             password: pass
         });
@@ -70,7 +70,7 @@ const userAuth = {
     },
     
     logout: async () => {
-        await supabase.auth.signOut();
+        await supabaseClient.auth.signOut();
         gameState.currentUser = null;
         gameState.session = null;
         userAuth.updateUI();
@@ -79,7 +79,7 @@ const userAuth = {
     },
     
     checkSession: async () => {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session } } = await supabaseClient.auth.getSession();
         if (session) {
             gameState.session = session;
             gameState.currentUser = session.user.user_metadata.username;
@@ -312,13 +312,13 @@ function updateHistoryUI(guess) {
 
 // Leaderboard Logic
 async function saveScore(difficulty, attempts, name) {
-    if (!supabase) return;
+    if (!supabaseClient) return;
     
     // Auth Check
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await supabaseClient.auth.getUser();
     if (!user) return;
 
-    const { error } = await supabase.from('scores').insert([
+    const { error } = await supabaseClient.from('scores').insert([
         { 
             user_id: user.id,
             username: name,
@@ -338,9 +338,9 @@ async function showLeaderboard() {
     
     showPage('page-leaderboard');
 
-    if (!supabase) return;
+    if (!supabaseClient) return;
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
         .from('scores')
         .select('*')
         .order('attempts', { ascending: true })
