@@ -490,65 +490,94 @@ input[type="number"]:focus {
 }
 
 /* ============================================
-   IDLE COMPONENT GLITCH — consistent low-level noise
-   inside main-wrapper. Filter only, no transform conflict.
+   AMAZING IDLE GLITCH — high-impact digital shivers
+   Combination of RGB split, spatial jitter, and slicing.
    ============================================ */
 
-/* Text glitch: 60-70% of cycle = brief flicker visible tiap ~1.8s dari siklus 3s */
-@keyframes text-idle-glitch {
-    0%, 60%  { filter: none; }
-    62%  { filter: brightness(5) hue-rotate(50deg) saturate(4); }
-    64%  { filter: brightness(0.1) saturate(0); }
-    66%  { filter: brightness(7) hue-rotate(-80deg) contrast(3); }
-    68%  { filter: brightness(0.3); }
-    70%  { filter: none; }
-    100% { filter: none; }
+/* Text shiver: Chromatic split + horizontal slice */
+@keyframes amazing-text-glitch {
+    0%, 90%, 100% {
+        transform: translate(0);
+        text-shadow: none;
+        clip-path: none;
+        filter: none;
+    }
+    91% {
+        transform: translate(-2px, 0.5px) skewX(2deg);
+        text-shadow: 2px 0 var(--accent-red), -2px 0 var(--neon-cyan);
+        clip-path: inset(30% 0 40% 0);
+    }
+    92% {
+        transform: translate(2px, -0.5px) skewX(-2deg);
+        text-shadow: -2px 0 var(--accent-red), 2px 0 var(--neon-cyan);
+        clip-path: inset(60% 0 10% 0);
+        filter: brightness(2);
+    }
+    93% {
+        transform: translate(0);
+        text-shadow: 1px 0 var(--accent-red), -1px 0 var(--neon-cyan);
+        clip-path: none;
+    }
 }
 
-/* Button glitch: brightness chaos burst visible tiap siklus */
-@keyframes btn-idle-glitch {
-    0%, 65%  { filter: none; }
-    67%  { filter: brightness(4) saturate(0) contrast(3); }
-    69%  { filter: brightness(0.2) saturate(3) hue-rotate(90deg); }
-    71%  { filter: brightness(6) contrast(2); }
-    73%  { filter: brightness(0.5); }
-    75%  { filter: none; }
-    100% { filter: none; }
+/* Button/Panel shiver: Violent jitter + brightness spike */
+@keyframes amazing-btn-glitch {
+    0%, 85%, 100% {
+        transform: translate(0) scale(1);
+        filter: none;
+        box-shadow: none;
+    }
+    86% {
+        transform: translate(-3px, 2px);
+        filter: drop-shadow(4px 0 var(--accent-red)) drop-shadow(-4px 0 var(--neon-cyan)) brightness(1.5);
+    }
+    87% {
+        transform: translate(3px, -2px) scale(1.01);
+        filter: hue-rotate(180deg) invert(1) contrast(2);
+    }
+    88% {
+        transform: translate(0);
+        filter: brightness(3);
+    }
 }
 
-/* Apply — steps(50, start) supaya step intermediate ikut di-render */
+/* Apply animations to components */
+h1 {
+    animation: amazing-text-glitch 4s steps(10) infinite;
+}
+
 .subtitle {
-    animation: text-idle-glitch 3s steps(50, start) infinite;
-}
-#feedback-msg {
-    animation: text-idle-glitch 2.5s steps(50, start) infinite;
-    animation-delay: 0.8s;
-}
-.hist-tag {
-    animation: text-idle-glitch 4s steps(50, start) infinite;
-    animation-delay: 1.4s;
-}
-.stat-value {
-    animation: text-idle-glitch 5s steps(50, start) infinite;
-    animation-delay: 2s;
+    animation: amazing-text-glitch 5s steps(10) infinite;
+    animation-delay: 1.5s;
 }
 
-/* Buttons */
+#feedback-msg {
+    animation: amazing-text-glitch 3.5s steps(10) infinite;
+    animation-delay: 0.7s;
+}
+
+.stat-value {
+    animation: amazing-text-glitch 6s steps(10) infinite;
+    animation-delay: 2.2s;
+}
+
 .btn {
-    animation: btn-idle-glitch 4s steps(50, start) infinite;
+    animation: amazing-btn-glitch 7.5s steps(12) infinite;
 }
+
 .btn-primary {
-    animation-delay: 1s;
+    animation-delay: 1.2s;
 }
+
 .btn-outline {
-    animation-delay: 2.5s;
+    animation-delay: 3.4s;
 }
-.btn:nth-child(2) {
-    animation-delay: 0.6s;
+
+/* Add jitter to input on focus for more "live" wire feel */
+input[type="number"]:focus {
+    animation: amazing-text-glitch 8s steps(10) infinite;
 }
-.btn:nth-child(3) {
-    animation-delay: 3s;
-}
+
 
 /* Leaderboard List */
 .leaderboard-list {
