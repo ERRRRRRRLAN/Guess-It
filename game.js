@@ -307,14 +307,7 @@ function triggerGlobalGlitch(duration = 200, type = 'neutral') {
     const wrapper = document.querySelector('.main-wrapper');
     const scanline = document.querySelector('.scanlines');
     
-    // 1. Reset all possible glitch classes to ensure animations REPLAY
-    const allGlitchClasses = ['glitch-active', 'glitch-error', 'glitch-success', 'glitch-intense', 'wrapper-jitter', 'wrapper-light-burst'];
-    wrapper.classList.remove(...allGlitchClasses);
-    if (scanline) scanline.classList.remove('scanline-flicker');
-    
-    void wrapper.offsetWidth; // Force Reflow
-
-    // 2. Setup classes and gradients
+    // Determine class and colors
     let glitchClass = 'glitch-active';
     let blockGradient = 'repeating-linear-gradient(90deg, var(--neon-cyan), var(--neon-magenta) 50px)';
     
@@ -326,64 +319,77 @@ function triggerGlobalGlitch(duration = 200, type = 'neutral') {
         blockGradient = 'repeating-linear-gradient(90deg, #00f2ff, #ffffff 50px)';
     }
 
-    // 3. Apply active classes
     wrapper.classList.add(glitchClass);
     if (type !== 'neutral') wrapper.classList.add('glitch-intense');
-    if (scanline) scanline.classList.add('scanline-flicker');
+    
+    // Scanline handling
+    if (scanline) {
+        if (type === 'error') scanline.classList.add('scanline-error');
+        else scanline.classList.add('scanline-flicker');
+    }
 
-    // Jitter/Burst variant
+    // Rapid Position Jitter + Light Burst on wrapper
     const jitterClass = type === 'success' ? 'wrapper-light-burst' : 'wrapper-jitter';
+    wrapper.classList.remove(jitterClass);
+    void wrapper.offsetWidth; // reflow
     wrapper.classList.add(jitterClass);
+    
+    // Dynamic Elements
+    const elementsToRemove = [];
+    
+    // 1. Neon Light Streaks
+    const streakCount = type === 'neutral' ? 1 : 3;
+    for (let i = 0; i < streakCount; i++) {
+        const streak = document.createElement('div');
+        streak.className = 'neon-streak';
+        streak.style.top = (Math.random() * 95 + 2) + '%';
+        streak.style.setProperty('--streak-dur', (0.4 + Math.random() * 0.4) + 's');
+        if (type === 'error')   streak.style.background = 'linear-gradient(90deg, transparent, #ff3e00, #ff0000, transparent)';
+        if (type === 'success') streak.style.background = 'linear-gradient(90deg, transparent, #00f2ff, #ffffff, transparent)';
+        document.body.appendChild(streak);
+        elementsToRemove.push(streak);
+    }
 
-    // 4. Create Signal Blocks
-    const blocks = [];
-    const blockCount = type === 'neutral' ? 2 : 5;
-    for(let i = 0; i < blockCount; i++) {
+    // 2. Signal blocks
+    const blockCount = type === 'neutral' ? 2 : 6;
+    for (let i = 0; i < blockCount; i++) {
         const b = document.createElement('div');
         b.className = 'signal-block';
         b.style.setProperty('--block-color', blockGradient);
         b.style.top = (Math.random() * 90) + '%';
         b.style.height = (Math.random() * 15 + 5) + '%';
         wrapper.appendChild(b);
-        blocks.push(b);
+        elementsToRemove.push(b);
     }
 
-    // 5. Create Neon Streaks
-    const streaks = [];
-    const streakCount = type === 'neutral' ? 1 : 3;
-    for (let i = 0; i < streakCount; i++) {
-        const s = document.createElement('div');
-        s.className = 'neon-streak';
-        s.style.top = (Math.random() * 95) + '%';
-        s.style.setProperty('--streak-dur', (0.4 + Math.random() * 0.4) + 's');
-        if (type === 'error') s.style.background = 'linear-gradient(90deg, transparent, #ff3e00, #ff0000, transparent)';
-        document.body.appendChild(s);
-        streaks.push(s);
-    }
-
-    // 6. Create Scan Beam
+    // 3. Glowing Scan Beam
     const beam = document.createElement('div');
     beam.className = 'scan-beam';
     beam.style.setProperty('--beam-dur', (duration / 1000).toFixed(2) + 's');
-    if (type === 'error') beam.style.setProperty('--beam-color', '#ff3e00');
+    if (type === 'error')   beam.style.setProperty('--beam-color', '#ff3e00');
+    if (type === 'success') beam.style.setProperty('--beam-color', '#00f2ff');
     wrapper.appendChild(beam);
+    elementsToRemove.push(beam);
 
-    // 7. H1 Chromatic Aberration
-    const h1 = document.querySelector('section.active h1');
-    if (h1) {
-        h1.classList.remove('h1-glitch');
-        void h1.offsetWidth;
-        h1.classList.add('h1-glitch');
-        setTimeout(() => h1.classList.remove('h1-glitch'), 400);
+    // 4. Dot Particles
+    const dotCount = type === 'neutral' ? 0 : 8;
+    for (let i = 0; i < dotCount; i++) {
+        const dot = document.createElement('div');
+        dot.className = 'glow-dot';
+        dot.style.left = (Math.random() * 90 + 5) + '%';
+        dot.style.top  = (Math.random() * 90 + 5) + '%';
+        dot.style.setProperty('--dot-color', type === 'error' ? '#ff3e00' : '#00f2ff');
+        dot.style.setProperty('--dot-dur', (0.2 + Math.random() * 0.3) + 's');
+        wrapper.appendChild(dot);
+        elementsToRemove.push(dot);
     }
 
-    // Cleanup
     setTimeout(() => {
         wrapper.classList.remove(glitchClass, 'glitch-intense', jitterClass);
-        if (scanline) scanline.classList.remove('scanline-flicker');
-        blocks.forEach(b => b.remove());
-        streaks.forEach(s => s.remove());
-        beam.remove();
+        if (scanline) scanline.classList.remove('scanline-error', 'scanline-flicker');
+        elementsToRemove.forEach(el => {
+            if (el && el.parentNode) el.parentNode.removeChild(el);
+        });
     }, duration);
 }
 
