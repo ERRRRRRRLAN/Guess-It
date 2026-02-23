@@ -826,7 +826,7 @@ async function loadUserPoints() {
 
 // Full number with dot separator (Indonesian style: 100.000)
 function formatNumber(n) {
-    return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
 // Abbreviated for leaderboard (10.6K)
