@@ -1,3 +1,8 @@
+// Supabase Configuration (REPLACE WITH YOUR KEYS)
+const SUPABASE_URL = 'https://pfzdtwvsghdwchrmogap.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBmemR0d3ZzZ2hkd2Nocm1vZ2FwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA4MDM1MzgsImV4cCI6MjA4NjM3OTUzOH0.dfD5GF7luaWCJ_nL-kjMIh51D143fw93mbgsIDYutUQ';
+const supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+
 // Game State
 let gameState = {
     targetNumber: 0,
@@ -7,25 +12,14 @@ let gameState = {
     maxRange: 100,
     history: [],
     difficulty: '',
-    currentUser: null
+    currentUser: null,
+    session: null
 };
 
 // User Authentication Logic
-const AUTH_KEY = 'guess_it_users';
-const SESSION_KEY = 'guess_it_session';
+const SESSION_KEY = 'guess_it_session_jwt'; // Supabase handles most of this
 
 const userAuth = {
-    getUsers: () => JSON.parse(localStorage.getItem(AUTH_KEY) || '{}'),
-    saveUsers: (users) => localStorage.setItem(AUTH_KEY, JSON.stringify(users)),
-    
-    // Async SHA-256 Hashing Utility
-    hashPassword: async (password) => {
-        const msgUint8 = new TextEncoder().encode(password);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-    },
-    
     register: async () => {
         const user = document.getElementById('reg-user').value.trim();
         const pass = document.getElementById('reg-pass').value.trim();
@@ -35,54 +29,60 @@ const userAuth = {
             return;
         }
         
-        const users = userAuth.getUsers();
-        if (users[user]) {
-            setFeedback("USER SUDAH ADA", true);
+        const { data, error } = await supabase.auth.signUp({
+            email: `${user}@guessit.game`, // Mock email for simple username login
+            password: pass,
+            options: {
+                data: { username: user }
+            }
+        });
+        
+        if (error) {
+            setFeedback(error.message.toUpperCase(), true);
             return;
         }
         
-        const hashedPassword = await userAuth.hashPassword(pass);
-        users[user] = { password: hashedPassword, isAdmin: false };
-        userAuth.saveUsers(users);
-        setFeedback("DAFTAR BERHASIL", false);
-        setTimeout(() => showPage('page-login'), 1000);
+        setFeedback("DAFTAR BERHASIL. CEK EMAIL (JIKA AKTIF)", false);
+        setTimeout(() => showPage('page-login'), 1500);
     },
     
     login: async () => {
         const user = document.getElementById('login-user').value.trim();
         const pass = document.getElementById('login-pass').value.trim();
         
-        const users = userAuth.getUsers();
-        const hashedPassword = await userAuth.hashPassword(pass);
+        const { data, error } = await supabase.auth.signInWithPassword({
+            email: `${user}@guessit.game`,
+            password: pass
+        });
         
-        if (users[user] && users[user].password === hashedPassword) {
-            userAuth.setSession(user);
-            showPage('page-menu');
-            triggerGlobalGlitch(300, 'success');
-        } else {
-            setFeedback("DATA SALAH", true);
+        if (error) {
+            setFeedback("DATA SALAH / BELUM VERIFIKASI", true);
             triggerFlash('flash-red');
+            return;
         }
-    },
-    
-    setSession: (username) => {
-        gameState.currentUser = username;
-        localStorage.setItem(SESSION_KEY, username);
+        
+        gameState.session = data.session;
+        gameState.currentUser = data.user.user_metadata.username;
+        
         userAuth.updateUI();
+        showPage('page-menu');
+        triggerGlobalGlitch(300, 'success');
     },
     
-    logout: () => {
+    logout: async () => {
+        await supabase.auth.signOut();
         gameState.currentUser = null;
-        localStorage.removeItem(SESSION_KEY);
+        gameState.session = null;
         userAuth.updateUI();
         showPage('page-menu');
         triggerGlobalGlitch(300, 'error');
     },
     
-    checkSession: () => {
-        const saved = localStorage.getItem(SESSION_KEY);
-        if (saved) {
-            gameState.currentUser = saved;
+    checkSession: async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+            gameState.session = session;
+            gameState.currentUser = session.user.user_metadata.username;
         }
         userAuth.updateUI();
     },
@@ -91,33 +91,24 @@ const userAuth = {
         const profile = document.getElementById('user-profile');
         const display = document.getElementById('display-username');
         const authActions = document.getElementById('auth-actions');
+        const logoutBtn = document.querySelector('.logout-btn');
         
         if (gameState.currentUser) {
             profile.style.display = 'flex';
             display.innerText = gameState.currentUser.toUpperCase();
+            logoutBtn.style.display = 'block';
             authActions.style.display = 'none';
         } else {
             profile.style.display = 'flex';
             display.innerText = "GUEST";
-            document.querySelector('.logout-btn').style.display = 'none';
+            logoutBtn.style.display = 'none';
             authActions.style.display = 'flex';
         }
     }
 };
 
-// Call cleanup and session check on load
+// Call session check on load
 document.addEventListener('DOMContentLoaded', () => {
-    // Cleanup old plain-text passwords (they are usually short, hashes are 64 chars)
-    const users = userAuth.getUsers();
-    let changed = false;
-    for (const u in users) {
-        if (users[u].password.length !== 64) {
-            delete users[u];
-            changed = true;
-        }
-    }
-    if (changed) userAuth.saveUsers(users);
-    
     userAuth.checkSession();
 });
 
@@ -320,80 +311,75 @@ function updateHistoryUI(guess) {
 }
 
 // Leaderboard Logic
-const STORAGE_KEY = 'guess_it_scores';
+async function saveScore(difficulty, attempts, name) {
+    if (!supabase) return;
+    
+    // Auth Check
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
-// Cleanup & Seeding
-function seedLeaderboard() {
-    const existing = localStorage.getItem(STORAGE_KEY);
-    // Jika data lama (adanya 'SISTEM') terdeteksi, hapus untuk pembersihan final
-    if (existing && (existing.includes('"name":"SISTEM"') || existing.includes('"name":"ALEX"'))) {
-        localStorage.removeItem(STORAGE_KEY);
+    const { error } = await supabase.from('scores').insert([
+        { 
+            user_id: user.id,
+            username: name,
+            difficulty: difficulty,
+            attempts: attempts
+        }
+    ]);
+    
+    if (error) {
+        console.error("Error saving score:", error);
     }
-    
-    if (localStorage.getItem(STORAGE_KEY)) return;
-    const emptyData = { easy: [], medium: [], hard: [] };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(emptyData));
 }
 
-// Call seeding on load
-seedLeaderboard();
-
-function saveScore(difficulty, attempts, name) {
-    let scores = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-    if (!scores[difficulty]) scores[difficulty] = [];
-    
-    scores[difficulty].push({ 
-        name: name || "PEMAIN", 
-        attempts, 
-        date: new Date().toLocaleDateString() 
-    });
-    
-    // Sort by attempts ascending
-    scores[difficulty].sort((a, b) => a.attempts - b.attempts);
-    // Keep top 5
-    scores[difficulty] = scores[difficulty].slice(0, 5);
-    
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(scores));
-}
-
-function showLeaderboard() {
+async function showLeaderboard() {
     const container = document.getElementById('leaderboard-content');
+    container.innerHTML = '<p class="subtitle" style="text-align:center; opacity:0.5; margin-top:2rem;">&gt; MENGAMBIL_DATA_DARI_CLOUD...</p>';
+    
+    showPage('page-leaderboard');
+
+    if (!supabase) return;
+
+    const { data, error } = await supabase
+        .from('scores')
+        .select('*')
+        .order('attempts', { ascending: true })
+        .order('created_at', { ascending: true })
+        .limit(10); // Show top 10 global instead of 5 local
+
+    if (error) {
+        container.innerHTML = '<p class="subtitle" style="text-align:center; color:var(--accent-red);">GAGAL MENGHUBUNGI SERVER</p>';
+        return;
+    }
+
     container.innerHTML = '';
     
-    const allScores = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-    const diffs = ['easy', 'medium', 'hard'];
-    
-    let hasAnyScore = false;
-    
-    diffs.forEach(diff => {
-        const scores = allScores[diff] || [];
-        if (scores.length > 0) hasAnyScore = true;
-        
-        scores.forEach((entry, index) => {
-            const el = document.createElement('div');
-            el.className = 'score-entry';
-            el.style.animationDelay = `${index * 0.1}s`;
-            el.innerHTML = `
-                <div style="display: flex; align-items: center; gap: 0.75rem;">
-                    <span class="rank-tag">#${index + 1}</span>
-                    <span class="player-name-tag">${(entry.name || 'USER').toUpperCase()}</span>
-                    <span class="diff-tag">${diff.toUpperCase()}</span>
-                </div>
-                <div style="display: flex; align-items: center; gap: 1rem;">
-                    <span class="score-value">${entry.attempts} PT</span>
-                    <span style="font-size: 0.6rem; color: var(--text-dim);">${entry.date}</span>
-                </div>
-            `;
-            container.appendChild(el);
-        });
-    });
-
-    if (!hasAnyScore) {
-        container.innerHTML = '<p class="subtitle" style="text-align:center; opacity:0.5; margin-top:2rem;">BELUM ADA REKOR</p>';
+    if (!data || data.length === 0) {
+        container.innerHTML = '<p class="subtitle" style="text-align:center; opacity:0.5; margin-top:2rem;">BELUM ADA REKOR GLOBAL</p>';
+        return;
     }
 
-    showPage('page-leaderboard');
+    data.forEach((entry, index) => {
+        const el = document.createElement('div');
+        el.className = 'score-entry';
+        el.style.animationDelay = `${index * 0.1}s`;
+        const dateStr = new Date(entry.created_at).toLocaleDateString();
+        el.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <span class="rank-tag">#${index + 1}</span>
+                <span class="player-name-tag">${(entry.username || 'USER').toUpperCase()}</span>
+                <span class="diff-tag">${entry.difficulty.toUpperCase()}</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <span class="score-value">${entry.attempts} PT</span>
+                <span style="font-size: 0.6rem; color: var(--text-dim);">${dateStr}</span>
+            </div>
+        `;
+        container.appendChild(el);
+    });
 }
+
+// Old localStorage showLeaderboard removed and replaced by async Supabase version above
 
 function showResult(isWin) {
     const content = document.getElementById('result-content');
@@ -437,18 +423,20 @@ function showResult(isWin) {
     showPage('page-result');
 }
 
-function handleSaveScore() {
+async function handleSaveScore() {
     const nameInput = document.getElementById('player-name');
     const saveBtn = document.getElementById('save-score-btn');
     const name = nameInput.value.trim().toUpperCase() || "PLAYER";
     const attempts = gameState.history.length;
     
-    saveScore(gameState.difficulty, attempts, name);
-    
-    // Disable input and button
+    // Disable UI immediately
     nameInput.disabled = true;
     saveBtn.disabled = true;
-    saveBtn.innerText = "TERSREKAM!";
+    saveBtn.innerText = "MENYIMPAN...";
+
+    await saveScore(gameState.difficulty, attempts, name);
+    
+    saveBtn.innerText = "TERSIMPAN!";
     triggerGlobalGlitch(300, 'success');
 }
 

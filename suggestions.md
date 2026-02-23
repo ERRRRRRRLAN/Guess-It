@@ -8,6 +8,8 @@ Daftar ide dan pengembangan fitur untuk **GUESS IT | Cyber Arcade**. File ini ak
 - **Visual Glitch System**: Efek Datamoshing & Scanlines bertema.
 - **Pembersihan UI**: Menghapus fitur "Lihat Flowchart" agar fokus pada game.
 - **Sistem Keamanan**: Password Hashing menggunakan SHA-256 (Web Crypto API).
+- **Cloud Database**: Integrasi Supabase PostgreSQL untuk data permanen.
+- **Global Leaderboard**: Papan skor real-time yang dapat diakses dari mana saja.
 - **Clean Leaderboard**: Menghapus data *dummy* agar papan skor murni dari pemain.
 
 ## 🛠️ Tahap Pengembangan Berikutnya
