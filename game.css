@@ -466,6 +466,49 @@ input[type="number"]:focus {
     100% { filter: brightness(1) saturate(1) contrast(1); transform: scale(1); box-shadow: none; }
 }
 
+/* ── Rapid Position Jitter (main wrapper spatial glitch) ── */
+@keyframes position-jitter {
+    0%   { transform: translate(0px, 0px);    filter: brightness(1);   }
+    5%   { transform: translate(-8px, 3px);   filter: brightness(3) saturate(0); }
+    10%  { transform: translate(6px, -4px);   filter: brightness(0.5); }
+    15%  { transform: translate(-4px, 6px);   filter: brightness(4) contrast(2); }
+    20%  { transform: translate(10px, -2px);  filter: brightness(1);   }
+    25%  { transform: translate(-6px, 5px);   filter: brightness(2) hue-rotate(90deg); }
+    30%  { transform: translate(4px, -8px);   filter: brightness(0.3); }
+    35%  { transform: translate(-2px, 3px);   filter: brightness(5) saturate(3); }
+    40%  { transform: translate(7px, 1px);    filter: brightness(1);   }
+    50%  { transform: translate(-5px, -3px);  filter: brightness(3) contrast(3); }
+    60%  { transform: translate(3px, 6px);    filter: brightness(0.4) hue-rotate(-90deg); }
+    70%  { transform: translate(-7px, 2px);   filter: brightness(2);   }
+    80%  { transform: translate(5px, -5px);   filter: brightness(4) saturate(0); }
+    90%  { transform: translate(-3px, 4px);   filter: brightness(0.6); }
+    100% { transform: translate(0px, 0px);    filter: brightness(1);   }
+}
+
+/* ── Ultra-fast light burst (lightning-like flicker) ── */
+@keyframes light-burst {
+    0%,100% { filter: brightness(1) contrast(1); }
+    8%       { filter: brightness(5) contrast(3) saturate(0); }
+    16%      { filter: brightness(0.2); }
+    24%      { filter: brightness(6) contrast(2) hue-rotate(60deg); }
+    32%      { filter: brightness(0.4) saturate(3); }
+    40%      { filter: brightness(4) contrast(4) saturate(0); }
+    48%      { filter: brightness(1); }
+    56%      { filter: brightness(7) contrast(2); }
+    64%      { filter: brightness(0.3) hue-rotate(-60deg); }
+    72%      { filter: brightness(3) saturate(2); }
+    80%      { filter: brightness(0.5); }
+    88%      { filter: brightness(4) contrast(3); }
+}
+
+/* Classes applied by JS */
+.wrapper-jitter {
+    animation: position-jitter 0.3s steps(10, end) both;
+}
+.wrapper-light-burst {
+    animation: light-burst 0.25s steps(12, end) both;
+}
+
 /* Horizontal Slicing effect */
 @keyframes datamosh-slice {
     0%   { transform: translate(0);         clip-path: inset(0 0 0 0); }

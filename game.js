@@ -322,6 +322,13 @@ function triggerGlobalGlitch(duration = 200, type = 'neutral') {
     wrapper.classList.add(glitchClass);
     if (scanline) scanline.classList.add('scanline-flicker');
 
+    // Rapid Position Jitter + Light Burst on wrapper
+    const jitterClass = type === 'success' ? 'wrapper-light-burst' : 'wrapper-jitter';
+    wrapper.classList.remove(jitterClass);
+    void wrapper.offsetWidth; // reflow to restart animation
+    wrapper.classList.add(jitterClass);
+    setTimeout(() => wrapper.classList.remove(jitterClass), type === 'success' ? 280 : 320);
+
     // H1 Chromatic Aberration
     const h1 = document.querySelector('section.active h1');
     if (h1) {
