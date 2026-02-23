@@ -820,8 +820,13 @@ async function loadUserPoints() {
             else if (row.mode === 'duel') dp += row.points || 0;
         });
     }
-    document.getElementById('display-sp').innerText = sp;
-    document.getElementById('display-dp').innerText = dp;
+    document.getElementById('display-sp').innerText = formatPoints(sp);
+    document.getElementById('display-dp').innerText = formatPoints(dp);
+}
+
+function formatPoints(n) {
+    if (n > 9999) return (n / 1000).toFixed(1) + 'K';
+    return n;
 }
 
 async function handleSaveScore(timeSec, points) {
