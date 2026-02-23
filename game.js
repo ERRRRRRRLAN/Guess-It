@@ -216,7 +216,7 @@ const inputField = document.getElementById('guess-input');
 const backBtn = document.getElementById('back-btn');
 
 function showPage(pageId, isPopState = false) {
-    playSFX('pageOpen');
+    if (!isPopState) playSFX('pageOpen');
     document.getElementById('duel-arena').style.display = 'none';
     document.getElementById('main-wrapper-solo').style.display = '';
     pages.forEach(id => {
@@ -233,12 +233,12 @@ function showPage(pageId, isPopState = false) {
 
 window.onpopstate = (e) => {
     const target = e.state ? e.state.pageId : 'page-menu';
+    playSFX('pageBack');
     cleanupActiveGame();
     showPage(target, true);
 };
 
 function goBack() {
-    playSFX('pageBack');
     cleanupActiveGame();
     history.back();
 }
