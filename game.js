@@ -18,7 +18,15 @@ const userAuth = {
     getUsers: () => JSON.parse(localStorage.getItem(AUTH_KEY) || '{}'),
     saveUsers: (users) => localStorage.setItem(AUTH_KEY, JSON.stringify(users)),
     
-    register: () => {
+    // Async SHA-256 Hashing Utility
+    hashPassword: async (password) => {
+        const msgUint8 = new TextEncoder().encode(password);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    },
+    
+    register: async () => {
         const user = document.getElementById('reg-user').value.trim();
         const pass = document.getElementById('reg-pass').value.trim();
         
@@ -33,18 +41,21 @@ const userAuth = {
             return;
         }
         
-        users[user] = { password: pass, isAdmin: false };
+        const hashedPassword = await userAuth.hashPassword(pass);
+        users[user] = { password: hashedPassword, isAdmin: false };
         userAuth.saveUsers(users);
         setFeedback("DAFTAR BERHASIL", false);
         setTimeout(() => showPage('page-login'), 1000);
     },
     
-    login: () => {
+    login: async () => {
         const user = document.getElementById('login-user').value.trim();
         const pass = document.getElementById('login-pass').value.trim();
         
         const users = userAuth.getUsers();
-        if (users[user] && users[user].password === pass) {
+        const hashedPassword = await userAuth.hashPassword(pass);
+        
+        if (users[user] && users[user].password === hashedPassword) {
             userAuth.setSession(user);
             showPage('page-menu');
             triggerGlobalGlitch(300, 'success');
@@ -94,8 +105,19 @@ const userAuth = {
     }
 };
 
-// Call session check on load
+// Call cleanup and session check on load
 document.addEventListener('DOMContentLoaded', () => {
+    // Cleanup old plain-text passwords (they are usually short, hashes are 64 chars)
+    const users = userAuth.getUsers();
+    let changed = false;
+    for (const u in users) {
+        if (users[u].password.length !== 64) {
+            delete users[u];
+            changed = true;
+        }
+    }
+    if (changed) userAuth.saveUsers(users);
+    
     userAuth.checkSession();
 });
 
