@@ -831,8 +831,8 @@ function formatNumber(n) {
 
 // Abbreviated for leaderboard (10.6K)
 function formatPointsShort(n) {
-    if (n > 9999) return (n / 1000).toFixed(1) + 'K';
-    return n;
+    if (n > 9999) return (n / 1000).toFixed(1).replace('.', ',') + 'K';
+    return formatNumber(n);
 }
 
 async function handleSaveScore(timeSec, points) {
