@@ -196,8 +196,8 @@ function showPage(pageId, isPopState = false) {
         backBtn.classList.add('visible');
     }
 
-    // Transition Glitch
-    triggerGlobalGlitch();
+    // Full Glitch Burst on every page transition
+    triggerPageTransitionGlitch();
 
     if (pageId === 'page-game') {
         inputField.value = '';
@@ -212,6 +212,70 @@ window.onpopstate = (e) => {
 };
 
 function goBack() { history.back(); }
+
+// Full glitch burst fired on EVERY page navigation
+function triggerPageTransitionGlitch() {
+    const wrapper = document.querySelector('.main-wrapper');
+    const scanline  = document.querySelector('.scanlines');
+    const duration  = 350;
+
+    // 1. Datamosh slice
+    wrapper.classList.remove('glitch-active');
+    void wrapper.offsetWidth;
+    wrapper.classList.add('glitch-active');
+
+    // 2. Position jitter
+    wrapper.classList.remove('wrapper-jitter');
+    void wrapper.offsetWidth;
+    wrapper.classList.add('wrapper-jitter');
+
+    // 3. Lightning light burst
+    wrapper.classList.remove('wrapper-light-burst');
+    void wrapper.offsetWidth;
+    wrapper.classList.add('wrapper-light-burst');
+
+    // 4. Scanline flicker
+    if (scanline) {
+        scanline.classList.remove('scanline-flicker');
+        void scanline.offsetWidth;
+        scanline.classList.add('scanline-flicker');
+    }
+
+    // 5. Neon streaks (2 buah)
+    const streaks = [];
+    for (let i = 0; i < 2; i++) {
+        const s = document.createElement('div');
+        s.className = 'neon-streak';
+        s.style.top = (Math.random() * 90 + 5) + '%';
+        s.style.setProperty('--streak-dur', (0.5 + Math.random() * 0.5) + 's');
+        s.style.setProperty('--streak-delay', (i * 0.07) + 's');
+        document.body.appendChild(s);
+        streaks.push(s);
+    }
+
+    // 6. Scan beam
+    const beam = document.createElement('div');
+    beam.className = 'scan-beam';
+    beam.style.setProperty('--beam-dur', (duration / 1000).toFixed(2) + 's');
+    wrapper.appendChild(beam);
+
+    // 7. H1 chromatic aberration
+    const h1 = document.querySelector('section.active h1');
+    if (h1) {
+        h1.classList.remove('h1-glitch');
+        void h1.offsetWidth;
+        h1.classList.add('h1-glitch');
+        setTimeout(() => h1.classList.remove('h1-glitch'), 420);
+    }
+
+    // Cleanup
+    setTimeout(() => {
+        wrapper.classList.remove('glitch-active', 'wrapper-jitter', 'wrapper-light-burst');
+        if (scanline) scanline.classList.remove('scanline-flicker');
+        beam.remove();
+        streaks.forEach(s => s.remove());
+    }, duration);
+}
 
 function startGame(level) {
     const config = difficulties[level];
