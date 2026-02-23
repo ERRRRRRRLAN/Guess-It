@@ -190,7 +190,7 @@ function showPage(pageId, isPopState = false) {
     }
 
     // Back Button Visibility
-    if (pageId === 'page-menu') {
+    if (pageId === 'page-menu' || pageId === 'page-result') {
         backBtn.classList.remove('visible');
     } else {
         backBtn.classList.add('visible');
