@@ -122,7 +122,8 @@ function initBGM() {
     const startBGM = () => {
         bgm.play().then(() => {
             bgmPlaying = true;
-            document.getElementById('bgm-toggle').innerText = '🔊';
+            document.getElementById('icon-sound-on').style.display = '';
+            document.getElementById('icon-sound-off').style.display = 'none';
         }).catch(() => {});
         document.removeEventListener('click', startBGM);
     };
@@ -134,11 +135,13 @@ function toggleBGM() {
     if (bgmPlaying) {
         bgm.pause();
         bgmPlaying = false;
-        document.getElementById('bgm-toggle').innerText = '🔇';
+        document.getElementById('icon-sound-on').style.display = 'none';
+        document.getElementById('icon-sound-off').style.display = '';
     } else {
         bgm.play();
         bgmPlaying = true;
-        document.getElementById('bgm-toggle').innerText = '🔊';
+        document.getElementById('icon-sound-on').style.display = '';
+        document.getElementById('icon-sound-off').style.display = 'none';
     }
 }
 

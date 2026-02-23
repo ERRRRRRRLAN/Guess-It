@@ -1175,16 +1175,28 @@ input:focus, #player-name:focus {
     right: 1rem;
     top: 50%;
     transform: translateY(-50%);
-    background: none;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    padding: 0.4rem 0.6rem;
-    font-size: 1rem;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid var(--neon-cyan);
+    padding: 0.35rem;
     cursor: pointer;
     border-radius: 4px;
-    transition: all 0.2s;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 6px rgba(0, 255, 255, 0.15);
+}
+
+.bgm-icon {
+    width: 18px;
+    height: 18px;
+    color: var(--neon-cyan);
+    filter: drop-shadow(0 0 3px rgba(0, 255, 255, 0.5));
 }
 
 .bgm-toggle:hover {
+    background: rgba(0, 255, 255, 0.08);
     border-color: var(--neon-cyan);
-    box-shadow: 0 0 8px rgba(0, 255, 255, 0.2);
+    box-shadow: 0 0 14px rgba(0, 255, 255, 0.3);
+    transform: translateY(-50%) scale(1.1);
 }
