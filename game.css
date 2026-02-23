@@ -1137,3 +1137,32 @@ input:focus, #player-name:focus {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.4; }
 }
+
+/* ============================================
+   LOCKED DUEL BUTTON
+   ============================================ */
+.btn.locked {
+    opacity: 0.4;
+    border-color: var(--accent-red);
+    box-shadow: 0 0 8px rgba(255, 0, 0, 0.15);
+    cursor: not-allowed;
+}
+
+.btn.locked:hover {
+    transform: none;
+    box-shadow: 0 0 12px rgba(255, 0, 0, 0.25);
+}
+
+.lock-icon {
+    font-size: 0.8em;
+}
+
+.duel-login-msg {
+    font-family: var(--font-data);
+    font-size: 0.6rem;
+    letter-spacing: 2px;
+    color: var(--accent-red);
+    text-align: center;
+    margin: -0.25rem 0 0 0;
+    opacity: 0.8;
+}

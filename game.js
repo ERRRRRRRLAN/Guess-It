@@ -86,11 +86,19 @@ const userAuth = {
             logoutBtn.style.display = 'block'; authActions.style.display = 'none';
             pointsDiv.style.display = 'flex';
             loadUserPoints();
+            // Unlock duel
+            document.getElementById('duel-btn').classList.remove('locked');
+            document.getElementById('duel-lock').style.display = 'none';
+            document.getElementById('duel-login-msg').style.display = 'none';
         } else {
             profile.style.display = 'flex';
             display.innerText = "GUEST";
             logoutBtn.style.display = 'none'; authActions.style.display = 'flex';
             pointsDiv.style.display = 'none';
+            // Lock duel
+            document.getElementById('duel-btn').classList.add('locked');
+            document.getElementById('duel-lock').style.display = 'inline';
+            document.getElementById('duel-login-msg').style.display = 'block';
         }
     }
 };
