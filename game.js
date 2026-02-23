@@ -79,14 +79,18 @@ const userAuth = {
         const display = document.getElementById('display-username');
         const authActions = document.getElementById('auth-actions');
         const logoutBtn = document.querySelector('.logout-btn');
+        const pointsDiv = document.getElementById('user-points');
         if (gameState.currentUser) {
             profile.style.display = 'flex';
             display.innerText = gameState.currentUser.toUpperCase();
             logoutBtn.style.display = 'block'; authActions.style.display = 'none';
+            pointsDiv.style.display = 'flex';
+            loadUserPoints();
         } else {
             profile.style.display = 'flex';
             display.innerText = "GUEST";
             logoutBtn.style.display = 'none'; authActions.style.display = 'flex';
+            pointsDiv.style.display = 'none';
         }
     }
 };
@@ -742,16 +746,18 @@ async function saveScore(difficulty, attempts, name, mode, points, timeSec) {
     const m = mode || 'solo';
     const p = points || 0;
 
-    // Check for existing record for this user+mode
-    const { data: existing } = await supabaseClient
+    // Check for existing record for this user+mode (use limit(1) to handle duplicates)
+    const { data: rows } = await supabaseClient
         .from('scores')
         .select('id, points')
         .eq('username', name)
         .eq('mode', m)
-        .maybeSingle();
+        .order('points', { ascending: false })
+        .limit(1);
 
-    if (existing) {
-        // Accumulate points
+    if (rows && rows.length > 0) {
+        const existing = rows[0];
+        // Accumulate points onto existing record
         const { error } = await supabaseClient
             .from('scores')
             .update({
@@ -770,6 +776,26 @@ async function saveScore(difficulty, attempts, name, mode, points, timeSec) {
         }]);
         if (error) console.error("Error inserting score:", error);
     }
+}
+
+async function loadUserPoints() {
+    if (!supabaseClient || !gameState.currentUser) return;
+    const uname = gameState.currentUser.toUpperCase();
+
+    const { data } = await supabaseClient
+        .from('scores')
+        .select('mode, points')
+        .eq('username', uname);
+
+    let sp = 0, dp = 0;
+    if (data) {
+        data.forEach(row => {
+            if (row.mode === 'solo') sp += row.points || 0;
+            else if (row.mode === 'duel') dp += row.points || 0;
+        });
+    }
+    document.getElementById('display-sp').innerText = sp;
+    document.getElementById('display-dp').innerText = dp;
 }
 
 async function handleSaveScore(timeSec, points) {

@@ -1074,3 +1074,37 @@ input:focus, #player-name:focus {
     color: var(--neon-cyan);
     letter-spacing: 2px;
 }
+
+/* ============================================
+   USER POINTS (SP / DP) BADGES
+   ============================================ */
+.user-points {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+    margin-bottom: 1rem;
+}
+
+.point-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.8rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.point-label {
+    font-family: var(--font-data);
+    font-size: 0.6rem;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+}
+
+.point-value {
+    font-family: var(--font-data);
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--neon-magenta);
+    text-shadow: 0 0 10px rgba(255, 0, 255, 0.4);
+}
