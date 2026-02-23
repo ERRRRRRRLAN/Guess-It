@@ -300,8 +300,14 @@ function updateHistoryUI(guess) {
 // Leaderboard Logic
 const STORAGE_KEY = 'guess_it_scores';
 
-// Mock Data Seeding (Disabled for production)
+// Cleanup & Seeding
 function seedLeaderboard() {
+    const existing = localStorage.getItem(STORAGE_KEY);
+    // Jika data lama (adanya 'SISTEM') terdeteksi, hapus untuk pembersihan final
+    if (existing && (existing.includes('"name":"SISTEM"') || existing.includes('"name":"ALEX"'))) {
+        localStorage.removeItem(STORAGE_KEY);
+    }
+    
     if (localStorage.getItem(STORAGE_KEY)) return;
     const emptyData = { easy: [], medium: [], hard: [] };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(emptyData));
