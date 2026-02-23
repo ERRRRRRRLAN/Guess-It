@@ -443,16 +443,15 @@ input[type="number"]:focus {
     width: 100%;
     height: 15%;
     background: var(--block-color, repeating-linear-gradient(90deg, var(--neon-cyan), var(--neon-magenta) 50px));
-    opacity: 0.4;
+    opacity: 0.55;
     pointer-events: none;
     z-index: 100;
     animation: block-drift 0.1s steps(2) infinite;
-    /* Neon light shadow — cahaya scanning */
-    box-shadow:
-        0 0 10px 3px rgba(0, 242, 255, 0.6),
-        0 0 28px 8px rgba(0, 242, 255, 0.25),
-        0 0 60px 16px rgba(0, 242, 255, 0.08);
-    filter: blur(0.4px);
+    /* Neon light glow — drop-shadow agar tidak terclip overflow:hidden */
+    filter:
+        drop-shadow(0 0 8px rgba(0, 242, 255, 0.9))
+        drop-shadow(0 0 20px rgba(0, 242, 255, 0.5))
+        drop-shadow(0 0 50px rgba(0, 242, 255, 0.2));
 }
 
 @keyframes block-drift {
@@ -476,56 +475,60 @@ input[type="number"]:focus {
    inside main-wrapper. Filter only, no transform conflict.
    ============================================ */
 
-/* For text elements: brief chromatic-like flicker */
+/* Text glitch: 60-70% of cycle = brief flicker visible tiap ~1.8s dari siklus 3s */
 @keyframes text-idle-glitch {
-    0%, 91%, 100% { filter: none; }
-    92%  { filter: brightness(2) hue-rotate(40deg) saturate(3); }
-    93%  { filter: brightness(0.4); }
-    94%  { filter: brightness(3) hue-rotate(-60deg); }
-    95%  { filter: none; }
+    0%, 60%  { filter: none; }
+    62%  { filter: brightness(5) hue-rotate(50deg) saturate(4); }
+    64%  { filter: brightness(0.1) saturate(0); }
+    66%  { filter: brightness(7) hue-rotate(-80deg) contrast(3); }
+    68%  { filter: brightness(0.3); }
+    70%  { filter: none; }
+    100% { filter: none; }
 }
 
-/* For buttons and bordered elements: brightness spike + saturation chaos */
+/* Button glitch: brightness chaos burst visible tiap siklus */
 @keyframes btn-idle-glitch {
-    0%, 89%, 100% { filter: none; }
-    90%  { filter: brightness(3) saturate(0) contrast(2); }
-    91%  { filter: brightness(0.3); }
-    92%  { filter: brightness(4) hue-rotate(90deg); }
-    93%  { filter: none; }
+    0%, 65%  { filter: none; }
+    67%  { filter: brightness(4) saturate(0) contrast(3); }
+    69%  { filter: brightness(0.2) saturate(3) hue-rotate(90deg); }
+    71%  { filter: brightness(6) contrast(2); }
+    73%  { filter: brightness(0.5); }
+    75%  { filter: none; }
+    100% { filter: none; }
 }
 
-/* Apply to inner wrapper text elements — staggered for organic feel */
+/* Apply — steps(50, start) supaya step intermediate ikut di-render */
 .subtitle {
-    animation: text-idle-glitch 6s steps(1) infinite;
+    animation: text-idle-glitch 3s steps(50, start) infinite;
 }
 #feedback-msg {
-    animation: text-idle-glitch 5s steps(1) infinite;
-    animation-delay: 1.3s;
+    animation: text-idle-glitch 2.5s steps(50, start) infinite;
+    animation-delay: 0.8s;
 }
 .hist-tag {
-    animation: text-idle-glitch 8s steps(1) infinite;
-    animation-delay: 0.7s;
+    animation: text-idle-glitch 4s steps(50, start) infinite;
+    animation-delay: 1.4s;
 }
 .stat-value {
-    animation: text-idle-glitch 11s steps(1) infinite;
-    animation-delay: 3.5s;
-}
-
-/* Buttons get the btn variant */
-.btn {
-    animation: btn-idle-glitch 9s steps(1) infinite;
-}
-.btn-primary {
+    animation: text-idle-glitch 5s steps(50, start) infinite;
     animation-delay: 2s;
 }
+
+/* Buttons */
+.btn {
+    animation: btn-idle-glitch 4s steps(50, start) infinite;
+}
+.btn-primary {
+    animation-delay: 1s;
+}
 .btn-outline {
-    animation-delay: 4.5s;
+    animation-delay: 2.5s;
 }
 .btn:nth-child(2) {
-    animation-delay: 1.5s;
+    animation-delay: 0.6s;
 }
 .btn:nth-child(3) {
-    animation-delay: 6s;
+    animation-delay: 3s;
 }
 
 /* Leaderboard List */
