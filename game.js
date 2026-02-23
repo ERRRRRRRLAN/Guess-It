@@ -60,7 +60,7 @@ const userAuth = {
             .from('users')
             .select('username')
             .eq('username', user)
-            .single();
+            .maybeSingle();
 
         if (existing) {
             setFeedback("> USERNAME SUDAH DIPAKAI", true);
