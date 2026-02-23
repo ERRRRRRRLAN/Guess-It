@@ -125,6 +125,7 @@ function showPage(pageId, isPopState = false) {
     else backBtn.classList.add('visible');
     triggerGlobalGlitch();
     if (pageId === 'page-game') { inputField.value = ''; inputField.focus(); document.getElementById('feedback-msg').innerText = ''; }
+    if (pageId === 'page-menu' && gameState.currentUser) loadUserPoints();
 }
 
 window.onpopstate = (e) => { showPage(e.state ? e.state.pageId : 'page-menu', true); };
@@ -786,6 +787,9 @@ async function saveScore(difficulty, attempts, name, mode, points, timeSec) {
         .select();
 
     console.log('[SAVE] inserted:', inserted, insErr);
+
+    // Auto-refresh SP/DP display
+    loadUserPoints();
 }
 
 // Utility: clear all scores (run in browser console: clearAllScores())
