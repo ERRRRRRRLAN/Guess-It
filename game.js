@@ -38,7 +38,11 @@ const userAuth = {
         });
         
         if (error) {
-            setFeedback(error.message.toUpperCase(), true);
+            if (error.status === 429) {
+                setFeedback("TERLALU BANYAK PERMINTAAN. TUNGGU SEBENTAR.", true);
+            } else {
+                setFeedback(error.message.toUpperCase(), true);
+            }
             return;
         }
         
@@ -56,7 +60,11 @@ const userAuth = {
         });
         
         if (error) {
-            setFeedback("DATA SALAH / BELUM VERIFIKASI", true);
+            if (error.status === 429) {
+                setFeedback("LIMIT LOGIN TERCAPAI. TUNGGU 15 MENIT.", true);
+            } else {
+                setFeedback("DATA SALAH / BELUM VERIFIKASI", true);
+            }
             triggerFlash('flash-red');
             return;
         }
