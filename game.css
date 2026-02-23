@@ -541,7 +541,7 @@ input[type="number"]:focus {
     }
 }
 
-/* Apply animations to components */
+/* Apply animations to components — UNIVERSAL coverage */
 h1 {
     animation: amazing-text-glitch 4s steps(10) infinite;
 }
@@ -556,26 +556,59 @@ h1 {
     animation-delay: 0.7s;
 }
 
+/* Stat cells and labels */
+.stat-cell {
+    animation: amazing-btn-glitch 11s steps(12) infinite;
+}
+.stat-label {
+    animation: amazing-text-glitch 8s steps(10) infinite;
+    animation-delay: 4.2s;
+}
 .stat-value {
     animation: amazing-text-glitch 6s steps(10) infinite;
     animation-delay: 2.2s;
 }
 
-.btn {
+/* All buttons */
+.btn, .diff-btn, .logout-btn, .back-btn {
     animation: amazing-btn-glitch 7.5s steps(12) infinite;
 }
+.btn-primary { animation-delay: 1.2s; }
+.btn-outline { animation-delay: 3.4s; }
+.diff-btn:nth-child(2) { animation-delay: 0.6s; }
+.diff-btn:nth-child(3) { animation-delay: 3s; }
+.logout-btn { animation-delay: 5s; }
+.back-btn { animation-delay: 0.3s; }
 
-.btn-primary {
-    animation-delay: 1.2s;
+/* Inputs */
+input, #player-name {
+    animation: amazing-btn-glitch 9s steps(12) infinite;
+}
+input:focus, #player-name:focus {
+    animation: amazing-text-glitch 4s steps(10) infinite;
 }
 
-.btn-outline {
-    animation-delay: 3.4s;
+/* User profile and tags */
+.user-profile, .name-entry-area {
+    animation: amazing-btn-glitch 13s steps(12) infinite;
 }
+#display-username, .player-name-tag, .rank-tag, .score-value, .win-text-small, .auth-toggle span {
+    animation: amazing-text-glitch 7s steps(10) infinite;
+}
+.auth-toggle span { animation-delay: 2.5s; }
 
-/* Add jitter to input on focus for more "live" wire feel */
-input[type="number"]:focus {
-    animation: amazing-text-glitch 8s steps(10) infinite;
+/* Hearts and lists */
+.heart {
+    animation: amazing-btn-glitch 10s steps(8) infinite;
+}
+.score-entry {
+    animation: amazing-btn-glitch 12s steps(10) infinite;
+}
+.score-entry:nth-child(odd) { animation-delay: 1.5s; }
+.score-entry:nth-child(even) { animation-delay: 4s; }
+.hist-tag {
+    animation: amazing-text-glitch 9s steps(10) infinite;
+    animation-delay: 1s;
 }
 
 
