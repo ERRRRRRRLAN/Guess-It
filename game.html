@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GUESS IT | Cyber Arcade</title>
+    <link rel="stylesheet" href="game.css">
+</head>
+<body>
+
+    <!-- Atmospheric Elements -->
+    <div class="grid-overlay"></div>
+    <div class="scanlines"></div>
+    <div id="screen-flash" class="screen-flash"></div>
+
+    <div class="main-wrapper">
+        
+        <header class="nav-header">
+            <button id="back-btn" class="back-btn" onclick="goBack()">Kembali</button>
+        </header>
+
+        <!-- Section: Main Menu -->
+        <section id="page-menu" class="active">
+            <div id="user-profile" class="user-profile">
+                <span id="display-username">GUEST</span>
+                <button class="logout-btn" onclick="userAuth.logout()">LOGOUT</button>
+            </div>
+            <h1>GUESS<br>IT.</h1>
+            <p class="subtitle">&gt; ASAH_LOGIKA_&_INSTING</p>
+            <div id="menu-actions" style="display: flex; flex-direction: column; gap: 0.75rem;">
+                <button class="btn btn-primary" id="play-btn" onclick="showPage('page-difficulty')">MULAI MAIN</button>
+                <button class="btn" onclick="showLeaderboard()">SKOR TERTINGGI</button>
+                <button class="btn btn-outline" style="border-color: rgba(0, 242, 255, 0.2); opacity: 0.6;" onclick="window.location.href='index.html'">LIHAT FLOWCHART</button>
+            </div>
+            <div id="auth-actions" style="display: none; flex-direction: column; gap: 0.75rem;">
+                <button class="btn btn-primary" onclick="showPage('page-login')">LOGIN</button>
+                <button class="btn btn-outline" onclick="showPage('page-register')">DAFTAR AKUN</button>
+            </div>
+        </section>
+
+        <!-- Section: Login -->
+        <section id="page-login">
+            <h1>LOGIN.</h1>
+            <p class="subtitle">&gt; MASUK_KE_SISTEM</p>
+            <div class="auth-form">
+                <input type="text" id="login-user" placeholder="USERNAME" maxlength="15">
+                <input type="password" id="login-pass" placeholder="PASSWORD">
+                <button class="btn btn-primary" onclick="userAuth.login()">MASUK</button>
+                <p class="auth-toggle">Belum punya akun? <span onclick="showPage('page-register')">Daftar</span></p>
+            </div>
+        </section>
+
+        <!-- Section: Register -->
+        <section id="page-register">
+            <h1>DAFTAR.</h1>
+            <p class="subtitle">&gt; BUAT_IDENTITAS_BARU</p>
+            <div class="auth-form">
+                <input type="text" id="reg-user" placeholder="USERNAME" maxlength="15">
+                <input type="password" id="reg-pass" placeholder="PASSWORD">
+                <button class="btn btn-primary" onclick="userAuth.register()">BUAT AKUN</button>
+                <p class="auth-toggle">Sudah punya akun? <span onclick="showPage('page-login')">Login</span></p>
+            </div>
+        </section>
+
+        <!-- Section: Difficulty Selection -->
+        <section id="page-difficulty">
+            <h1>LEVEL.</h1>
+            <p class="subtitle">&gt; PILIH_LEVEL</p>
+            <div class="diff-list">
+                <div class="diff-btn" onclick="startGame('easy')">
+                    <span class="diff-name">MUDAH</span>
+                    <span class="diff-info">1-10 [5_NYAWA]</span>
+                </div>
+                <div class="diff-btn" onclick="startGame('medium')">
+                    <span class="diff-name">SEDANG</span>
+                    <span class="diff-info">1-50 [7_NYAWA]</span>
+                </div>
+                <div class="diff-btn" onclick="startGame('hard')">
+                    <span class="diff-name">SULIT</span>
+                    <span class="diff-info">1-100 [10_NYAWA]</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section: Game Play -->
+        <section id="page-game">
+            <div id="bg-target" class="bg-number">0</div>
+            <div class="hearts-container" id="hearts-container">
+                <!-- SVG Hearts injected via JS -->
+            </div>
+
+            <div class="stat-row">
+                <div class="stat-cell">
+                    <span class="stat-label">RANGE_MIN</span>
+                    <span id="low-display" class="stat-value">0</span>
+                </div>
+                <div class="stat-cell">
+                    <span class="stat-label">RANGE_MAX</span>
+                    <span id="high-display" class="stat-value">0</span>
+                </div>
+            </div>
+            
+            <div class="feedback-area" id="feedback-msg"></div>
+
+            <div class="input-section">
+                <input type="number" id="guess-input" placeholder="00" min="1" max="100">
+            </div>
+
+            <button class="btn btn-primary" style="width: 100%; margin-bottom: 2rem;" onclick="checkGuess()">TEBAK ANGKA</button>
+
+            <div class="history-bar" id="history-list">
+                <!-- History tags injected here -->
+            </div>
+        </section>
+
+        <!-- Section: Results -->
+        <section id="page-result">
+            <div id="result-content">
+                <!-- Injected via JS -->
+            </div>
+            
+            <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 2rem;">
+                <button class="btn btn-primary" onclick="showPage('page-difficulty')">MAIN LAGI</button>
+                <button class="btn" onclick="showPage('page-menu')">MENU UTAMA</button>
+            </div>
+        </section>
+
+        <!-- Section: Leaderboard -->
+        <section id="page-leaderboard">
+            <h1>JUARA.</h1>
+            <p class="subtitle">&gt; TOP_5_PLAYERS</p>
+            
+            <div id="leaderboard-content" class="leaderboard-list">
+                <!-- Scores injected here -->
+            </div>
+
+            <button class="btn btn-primary" style="margin-top: 2rem;" onclick="showPage('page-menu')">KEMBALI KE MENU</button>
+        </section>
+
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>
