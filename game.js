@@ -59,6 +59,11 @@ const userAuth = {
         const user = document.getElementById('login-user').value.trim();
         const pass = document.getElementById('login-pass').value.trim();
         
+        const loginBtn = document.querySelector('#page-login .btn-primary');
+        const originalText = loginBtn.innerText;
+        loginBtn.disabled = true;
+        loginBtn.innerText = "COBA LOGIN...";
+
         const { data, error } = await supabaseClient.auth.signInWithPassword({
             email: `${user}@guessit.game`,
             password: pass
