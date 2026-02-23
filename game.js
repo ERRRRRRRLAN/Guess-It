@@ -745,12 +745,14 @@ function exitDuel() {
 // SCORE SAVING
 // ============================================================
 async function saveScore(difficulty, attempts, name, mode, points, timeSec) {
-    if (!supabaseClient) return;
+    if (!supabaseClient) { console.error('[SAVE] No supabase client'); return; }
     const m = mode || 'solo';
     const p = points || 0;
 
-    // Check for existing record for this user+mode (use limit(1) to handle duplicates)
-    const { data: rows } = await supabaseClient
+    console.log(`[SAVE] Attempting save: user=${name}, mode=${m}, points_to_add=${p}`);
+
+    // Check for existing record for this user+mode
+    const { data: rows, error: selectErr } = await supabaseClient
         .from('scores')
         .select('id, points')
         .eq('username', name)
@@ -758,27 +760,44 @@ async function saveScore(difficulty, attempts, name, mode, points, timeSec) {
         .order('points', { ascending: false })
         .limit(1);
 
+    console.log(`[SAVE] SELECT result:`, { rows, selectErr });
+
     if (rows && rows.length > 0) {
         const existing = rows[0];
-        // Accumulate points onto existing record
-        const { error } = await supabaseClient
+        const newTotal = (existing.points || 0) + p;
+        console.log(`[SAVE] EXISTING found id=${existing.id}, old_points=${existing.points}, new_total=${newTotal}`);
+
+        const { data: updateData, error: updateErr } = await supabaseClient
             .from('scores')
             .update({
-                points: existing.points + p,
+                points: newTotal,
                 difficulty: difficulty,
                 attempts: attempts,
                 time_seconds: timeSec || 0
             })
-            .eq('id', existing.id);
-        if (error) console.error("Error updating score:", error);
+            .eq('id', existing.id)
+            .select();
+
+        console.log(`[SAVE] UPDATE result:`, { updateData, updateErr });
+        if (updateErr) console.error("[SAVE] UPDATE ERROR:", updateErr);
     } else {
-        // First time — insert
-        const { error } = await supabaseClient.from('scores').insert([{
+        console.log(`[SAVE] No existing record, INSERTING new row`);
+        const { data: insertData, error: insertErr } = await supabaseClient.from('scores').insert([{
             username: name, difficulty: difficulty, attempts: attempts,
             mode: m, points: p, time_seconds: timeSec || 0
-        }]);
-        if (error) console.error("Error inserting score:", error);
+        }]).select();
+
+        console.log(`[SAVE] INSERT result:`, { insertData, insertErr });
+        if (insertErr) console.error("[SAVE] INSERT ERROR:", insertErr);
     }
+}
+
+// Utility: clear all scores (run from console: clearAllScores())
+async function clearAllScores() {
+    if (!supabaseClient) return;
+    const { error } = await supabaseClient.from('scores').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    if (error) console.error("Clear scores error:", error);
+    else console.log("All scores cleared!");
 }
 
 async function loadUserPoints() {
