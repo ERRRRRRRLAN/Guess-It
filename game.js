@@ -204,8 +204,8 @@ function initPresence() {
 // ============================================================
 const difficulties = {
     easy:   { max: 10,  lives: 5,  multiplier: 0.5 },
-    medium: { max: 50,  lives: 7,  multiplier: 1.0 },
-    hard:   { max: 100, lives: 10, multiplier: 1.5 }
+    medium: { max: 50,  lives: 5,  multiplier: 1.0 },
+    hard:   { max: 100, lives: 5,  multiplier: 1.5 }
 };
 
 // ============================================================
