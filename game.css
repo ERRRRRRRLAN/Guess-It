@@ -393,39 +393,18 @@ input[type="number"]:focus {
     overflow: hidden;
 }
 
-/* Variant: Error Glitch (Red/Chaotic/Flickering) */
+/* Variant: Error Glitch (Red/Chaotic) */
 .glitch-error {
-    animation: 
-        datamosh-slice 0.1s steps(2, end) infinite,
-        violent-jitter 0.08s steps(2) infinite !important;
-    filter: saturate(4) contrast(1.5) hue-rotate(-15deg) !important;
-    position: relative;
-    z-index: 1000;
+    animation: datamosh-slice 0.15s steps(3, end) both infinite;
+    filter: saturate(2) hue-rotate(-10deg);
 }
-
-/* Hard red flicker overlay */
 .glitch-error::before {
     content: '';
     position: absolute;
-    inset: -10px;
-    background: rgba(255, 0, 0, 0.2);
-    z-index: 50;
+    inset: 0;
+    background: rgba(255, 0, 0, 0.1);
+    z-index: 5;
     pointer-events: none;
-    animation: fast-flicker 0.05s infinite;
-}
-
-@keyframes fast-flicker {
-    0%, 100% { opacity: 0; }
-    50% { opacity: 1; background: rgba(255, 0, 0, 0.3); }
-}
-
-@keyframes violent-jitter {
-    0% { transform: translate(0,0) scale(1.0); }
-    20% { transform: translate(-25px, 15px) scale(1.02) skewX(10deg); }
-    40% { transform: translate(30px, -20px) scale(0.98) skewY(-5deg); }
-    60% { transform: translate(-15px, 25px) scale(1.05) rotate(1deg); }
-    80% { transform: translate(20px, -10px) scale(1.0) skewX(-10deg); }
-    100% { transform: translate(0,0) scale(1.0); }
 }
 
 /* Variant: Success Glitch (Cyan/Clean) */
@@ -499,6 +478,70 @@ input[type="number"]:focus {
     50% { top: 50%; left: 10%; }
     100% { top: 100%; left: -5%; }
 }
+
+/* ── Neon Light Streaks ── */
+.neon-streak {
+    position: fixed;
+    left: -100%;
+    width: 200%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--neon-cyan), #fff, transparent);
+    box-shadow: 0 0 15px var(--neon-cyan);
+    z-index: 1000;
+    pointer-events: none;
+    animation: streak-slide var(--streak-dur, 0.4s) ease-in forwards;
+}
+
+@keyframes streak-slide {
+    0% { left: -100%; opacity: 0; }
+    30% { opacity: 1; }
+    100% { left: 100%; opacity: 0; }
+}
+
+/* ── Glowing Scan Beam ── */
+.scan-beam {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background: var(--beam-color, var(--neon-cyan));
+    box-shadow: 0 0 20px 4px var(--beam-color, var(--neon-cyan));
+    z-index: 50;
+    pointer-events: none;
+    animation: beam-sweep var(--beam-dur, 0.25s) linear forwards;
+}
+
+@keyframes beam-sweep {
+    0% { top: 0; opacity: 1; }
+    100% { top: 100%; opacity: 0; }
+}
+
+/* ── Rapid Position Jitter ── */
+@keyframes position-jitter {
+    0%   { transform: translate(0, 0); }
+    10%  { transform: translate(-8px, -5px) rotate(-1deg); }
+    20%  { transform: translate(6px, 4px) rotate(1deg); }
+    30%  { transform: translate(-4px, 10px); }
+    40%  { transform: translate(8px, -6px); }
+    50%  { transform: translate(-10px, 3px); }
+    60%  { transform: translate(5px, -8px); }
+    70%  { transform: translate(-3px, 5px); }
+    80%  { transform: translate(7px, -4px); }
+    90%  { transform: translate(-5px, 2px); }
+    100% { transform: translate(0, 0); }
+}
+
+/* ── Ultra-fast Light Burst ── */
+@keyframes light-burst {
+    0%, 100% { filter: brightness(1); }
+    10%, 30%, 50%, 70%, 90% { filter: brightness(5) contrast(2) saturate(0.5); }
+    20%, 40%, 60%, 80% { filter: brightness(0.2); }
+}
+
+/* Helper Classes */
+.wrapper-jitter { animation: position-jitter 0.25s steps(10) infinite; }
+.wrapper-light-burst { animation: light-burst 0.3s steps(8) infinite; }
+
 
 /* Feedback Pulse (Enhanced) */
 .correct-pulse {
@@ -607,6 +650,19 @@ input, #player-name {
 }
 input:focus, #player-name:focus {
     animation: amazing-text-glitch 4s steps(10) infinite;
+}
+
+/* ── H1 Chromatic Aberration ── */
+.h1-glitch {
+    animation: h1-shiver 0.4s steps(2) infinite;
+}
+
+@keyframes h1-shiver {
+    0% { transform: translate(0); mask-image: none; }
+    25% { transform: translate(-3px, 1px); text-shadow: 2px 0 var(--accent-red), -2px 0 var(--neon-cyan); }
+    50% { transform: translate(3px, -1px); text-shadow: -2px 0 var(--accent-red), 2px 0 var(--neon-cyan); }
+    75% { transform: translate(-1px, -2px); text-shadow: 3px 0 var(--accent-red), -3px 0 var(--neon-cyan); }
+    100% { transform: translate(0); }
 }
 
 /* User profile and tags */

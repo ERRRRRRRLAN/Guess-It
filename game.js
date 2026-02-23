@@ -307,7 +307,14 @@ function triggerGlobalGlitch(duration = 200, type = 'neutral') {
     const wrapper = document.querySelector('.main-wrapper');
     const scanline = document.querySelector('.scanlines');
     
-    // Determine class and colors
+    // 1. Reset all possible glitch classes to ensure animations REPLAY
+    const allGlitchClasses = ['glitch-active', 'glitch-error', 'glitch-success', 'glitch-intense', 'wrapper-jitter', 'wrapper-light-burst'];
+    wrapper.classList.remove(...allGlitchClasses);
+    if (scanline) scanline.classList.remove('scanline-flicker');
+    
+    void wrapper.offsetWidth; // Force Reflow
+
+    // 2. Setup classes and gradients
     let glitchClass = 'glitch-active';
     let blockGradient = 'repeating-linear-gradient(90deg, var(--neon-cyan), var(--neon-magenta) 50px)';
     
@@ -319,21 +326,19 @@ function triggerGlobalGlitch(duration = 200, type = 'neutral') {
         blockGradient = 'repeating-linear-gradient(90deg, #00f2ff, #ffffff 50px)';
     }
 
+    // 3. Apply active classes
     wrapper.classList.add(glitchClass);
-    if (type === 'error') wrapper.classList.add('shake');
     if (type !== 'neutral') wrapper.classList.add('glitch-intense');
     if (scanline) scanline.classList.add('scanline-flicker');
 
-    // Rapid Position Jitter + Light Burst on wrapper
+    // Jitter/Burst variant
     const jitterClass = type === 'success' ? 'wrapper-light-burst' : 'wrapper-jitter';
-    wrapper.classList.remove(jitterClass);
-    void wrapper.offsetWidth; // reflow to restart animation
     wrapper.classList.add(jitterClass);
-    
+
+    // 4. Create Signal Blocks
     const blocks = [];
-    const count = type === 'neutral' ? 2 : 5;
-    
-    for(let i=0; i<count; i++) {
+    const blockCount = type === 'neutral' ? 2 : 5;
+    for(let i = 0; i < blockCount; i++) {
         const b = document.createElement('div');
         b.className = 'signal-block';
         b.style.setProperty('--block-color', blockGradient);
@@ -343,18 +348,42 @@ function triggerGlobalGlitch(duration = 200, type = 'neutral') {
         blocks.push(b);
     }
 
-    // Placeholder for new elements that would be created in a more complex glitch
-    const streaks = []; // Assuming these would be created earlier in a full implementation
-    const beam = document.createElement('div'); // Assuming this would be created earlier
-    const dots = []; // Assuming these would be created earlier
+    // 5. Create Neon Streaks
+    const streaks = [];
+    const streakCount = type === 'neutral' ? 1 : 3;
+    for (let i = 0; i < streakCount; i++) {
+        const s = document.createElement('div');
+        s.className = 'neon-streak';
+        s.style.top = (Math.random() * 95) + '%';
+        s.style.setProperty('--streak-dur', (0.4 + Math.random() * 0.4) + 's');
+        if (type === 'error') s.style.background = 'linear-gradient(90deg, transparent, #ff3e00, #ff0000, transparent)';
+        document.body.appendChild(s);
+        streaks.push(s);
+    }
 
+    // 6. Create Scan Beam
+    const beam = document.createElement('div');
+    beam.className = 'scan-beam';
+    beam.style.setProperty('--beam-dur', (duration / 1000).toFixed(2) + 's');
+    if (type === 'error') beam.style.setProperty('--beam-color', '#ff3e00');
+    wrapper.appendChild(beam);
+
+    // 7. H1 Chromatic Aberration
+    const h1 = document.querySelector('section.active h1');
+    if (h1) {
+        h1.classList.remove('h1-glitch');
+        void h1.offsetWidth;
+        h1.classList.add('h1-glitch');
+        setTimeout(() => h1.classList.remove('h1-glitch'), 400);
+    }
+
+    // Cleanup
     setTimeout(() => {
-        wrapper.classList.remove(glitchClass, 'glitch-intense', jitterClass, 'shake');
+        wrapper.classList.remove(glitchClass, 'glitch-intense', jitterClass);
         if (scanline) scanline.classList.remove('scanline-flicker');
         blocks.forEach(b => b.remove());
-        if (typeof streaks !== 'undefined') streaks.forEach(s => s.remove());
-        if (typeof beam !== 'undefined' && beam.parentNode) beam.remove();
-        if (typeof dots !== 'undefined') dots.forEach(d => d.remove());
+        streaks.forEach(s => s.remove());
+        beam.remove();
     }, duration);
 }
 
