@@ -447,6 +447,12 @@ input[type="number"]:focus {
     pointer-events: none;
     z-index: 100;
     animation: block-drift 0.1s steps(2) infinite;
+    /* Neon light shadow — cahaya scanning */
+    box-shadow:
+        0 0 10px 3px rgba(0, 242, 255, 0.6),
+        0 0 28px 8px rgba(0, 242, 255, 0.25),
+        0 0 60px 16px rgba(0, 242, 255, 0.08);
+    filter: blur(0.4px);
 }
 
 @keyframes block-drift {
@@ -465,75 +471,62 @@ input[type="number"]:focus {
     100% { filter: brightness(1); transform: scale(1); }
 }
 
-/* ════════════════════════════════════════════════
-   ADDITIVE GLITCH ENHANCEMENTS — 88e728f preserved
-   ════════════════════════════════════════════════ */
+/* ============================================
+   IDLE COMPONENT GLITCH — consistent low-level noise
+   inside main-wrapper. Filter only, no transform conflict.
+   ============================================ */
 
-/* Glow shadow on signal-block scanning strips */
-.signal-block {
-    box-shadow:
-        0 0 8px 2px var(--block-color, var(--neon-cyan)),
-        0 0 20px 4px rgba(0, 242, 255, 0.3),
-        inset 0 0 10px rgba(255, 255, 255, 0.1);
-    filter: brightness(1.4);
-}
-
-/* ── Idle Micro-Glitch on inner components ──
-   Uses ::after pseudo to keep it purely additive */
-
-/* H1 — subtle horizontal clip-shift every ~7s */
-@keyframes h1-idle-glitch {
-    0%,  94% { clip-path: inset(0 0 0 0);      transform: translate(0); }
-    95%       { clip-path: inset(20% 0 75% 0);  transform: translate(-4px, 0); filter: brightness(1.5) hue-rotate(30deg); }
-    96%       { clip-path: inset(60% 0 30% 0);  transform: translate(4px, 0);  filter: brightness(2) hue-rotate(-30deg); }
-    97%       { clip-path: inset(40% 0 50% 0);  transform: translate(-2px, 0); }
-    98%,100%  { clip-path: inset(0 0 0 0);      transform: translate(0); filter: none; }
-}
-h1 {
-    animation: h1-idle-glitch 7s steps(4, end) infinite;
-    animation-delay: 1.5s;
+/* For text elements: brief chromatic-like flicker */
+@keyframes text-idle-glitch {
+    0%, 91%, 100% { filter: none; }
+    92%  { filter: brightness(2) hue-rotate(40deg) saturate(3); }
+    93%  { filter: brightness(0.4); }
+    94%  { filter: brightness(3) hue-rotate(-60deg); }
+    95%  { filter: none; }
 }
 
-/* Buttons — faint border flash every ~9s */
-@keyframes btn-idle-flicker {
-    0%,  88% { box-shadow: none; border-color: rgba(0, 242, 255, 0.2); }
-    89%       { box-shadow: 0 0 10px rgba(0,242,255,0.6), inset 0 0 8px rgba(0,242,255,0.1); border-color: var(--neon-cyan); filter: brightness(1.3); }
-    90%       { box-shadow: none; border-color: rgba(0,242,255,0.05); filter: brightness(0.8); }
-    91%       { box-shadow: 0 0 14px rgba(0,242,255,0.5); border-color: var(--neon-cyan); filter: brightness(1.5); }
-    92%,100%  { box-shadow: none; border-color: rgba(0, 242, 255, 0.2); filter: none; }
-}
-.btn {
-    animation: btn-idle-flicker 9s steps(1) infinite;
+/* For buttons and bordered elements: brightness spike + saturation chaos */
+@keyframes btn-idle-glitch {
+    0%, 89%, 100% { filter: none; }
+    90%  { filter: brightness(3) saturate(0) contrast(2); }
+    91%  { filter: brightness(0.3); }
+    92%  { filter: brightness(4) hue-rotate(90deg); }
+    93%  { filter: none; }
 }
 
-/* Subtitle (> ASAH_LOGIKA) — faint text-shadow pulse every ~5s */
-@keyframes subtitle-pulse {
-    0%,  80% { text-shadow: none; opacity: 1; }
-    81%       { text-shadow: 0 0 8px var(--neon-cyan), 2px 0 var(--neon-magenta); opacity: 0.7; }
-    83%       { text-shadow: -2px 0 var(--neon-cyan); opacity: 1; }
-    85%,100%  { text-shadow: none; }
-}
+/* Apply to inner wrapper text elements — staggered for organic feel */
 .subtitle {
-    animation: subtitle-pulse 5s steps(1) infinite;
+    animation: text-idle-glitch 6s steps(1) infinite;
+}
+#feedback-msg {
+    animation: text-idle-glitch 5s steps(1) infinite;
+    animation-delay: 1.3s;
+}
+.hist-tag {
+    animation: text-idle-glitch 8s steps(1) infinite;
+    animation-delay: 0.7s;
+}
+.stat-value {
+    animation: text-idle-glitch 11s steps(1) infinite;
+    animation-delay: 3.5s;
+}
+
+/* Buttons get the btn variant */
+.btn {
+    animation: btn-idle-glitch 9s steps(1) infinite;
+}
+.btn-primary {
     animation-delay: 2s;
 }
-
-/* Score/leaderboard entries — scanline shimmer every ~11s */
-@keyframes entry-glitch {
-    0%,  90% { filter: none; }
-    91%       { filter: brightness(1.8) saturate(2); transform: translateX(-3px); }
-    92%       { filter: brightness(0.6); transform: translateX(3px); }
-    93%       { filter: brightness(1.4) hue-rotate(45deg); transform: translateX(0); }
-    94%,100%  { filter: none; transform: none; }
+.btn-outline {
+    animation-delay: 4.5s;
 }
-.score-entry {
-    animation: entry-glitch 11s steps(4, end) infinite;
+.btn:nth-child(2) {
+    animation-delay: 1.5s;
 }
-/* Stagger entries so they don't all flash at once */
-.score-entry:nth-child(2) { animation-delay: 0.7s; }
-.score-entry:nth-child(3) { animation-delay: 1.4s; }
-.score-entry:nth-child(4) { animation-delay: 2.1s; }
-.score-entry:nth-child(5) { animation-delay: 2.8s; }
+.btn:nth-child(3) {
+    animation-delay: 6s;
+}
 
 /* Leaderboard List */
 .leaderboard-list {
