@@ -397,9 +397,10 @@ input[type="number"]:focus {
 .glitch-error {
     animation: 
         datamosh-slice 0.1s steps(2, end) infinite,
-        violent-jitter 0.08s steps(2) infinite;
-    filter: saturate(4) contrast(1.5) hue-rotate(-15deg);
+        violent-jitter 0.08s steps(2) infinite !important;
+    filter: saturate(4) contrast(1.5) hue-rotate(-15deg) !important;
     position: relative;
+    z-index: 1000;
 }
 
 /* Hard red flicker overlay */

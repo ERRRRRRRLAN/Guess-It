@@ -320,6 +320,7 @@ function triggerGlobalGlitch(duration = 200, type = 'neutral') {
     }
 
     wrapper.classList.add(glitchClass);
+    if (type === 'error') wrapper.classList.add('shake');
     if (type !== 'neutral') wrapper.classList.add('glitch-intense');
     if (scanline) scanline.classList.add('scanline-flicker');
 
@@ -348,12 +349,12 @@ function triggerGlobalGlitch(duration = 200, type = 'neutral') {
     const dots = []; // Assuming these would be created earlier
 
     setTimeout(() => {
-        wrapper.classList.remove(glitchClass, 'glitch-intense', jitterClass);
+        wrapper.classList.remove(glitchClass, 'glitch-intense', jitterClass, 'shake');
         if (scanline) scanline.classList.remove('scanline-flicker');
         blocks.forEach(b => b.remove());
-        streaks.forEach(s => s.remove()); // These will do nothing if streaks is empty
-        beam.remove(); // This will throw an error if beam is not appended to DOM
-        dots.forEach(d => d.remove()); // These will do nothing if dots is empty
+        if (typeof streaks !== 'undefined') streaks.forEach(s => s.remove());
+        if (typeof beam !== 'undefined' && beam.parentNode) beam.remove();
+        if (typeof dots !== 'undefined') dots.forEach(d => d.remove());
     }, duration);
 }
 
