@@ -1,4 +1,4 @@
-// Supabase Configuration (REPLACE WITH YOUR KEYS)
+// Supabase Configuration
 const SUPABASE_URL = 'https://pfzdtwvsghdwchrmogap.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBmemR0d3ZzZ2hkd2Nocm1vZ2FwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA4MDM1MzgsImV4cCI6MjA4NjM3OTUzOH0.dfD5GF7luaWCJ_nL-kjMIh51D143fw93mbgsIDYutUQ';
 const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
@@ -13,95 +13,129 @@ let gameState = {
     history: [],
     difficulty: '',
     currentUser: null,
-    session: null
 };
 
-// User Authentication Logic
-const SESSION_KEY = 'guess_it_session_jwt'; // Supabase handles most of this
+// ============================================================
+// CUSTOM AUTH - No Supabase Auth, uses users table + SHA-256
+// ============================================================
+const SESSION_KEY = 'guess_it_user_session';
+
+// SHA-256 Hashing Utility
+async function hashPassword(password) {
+    const msgUint8 = new TextEncoder().encode(password);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Simple rate limiter (client-side, 1 attempt per 2 seconds)
+let lastAuthAttempt = 0;
+function isRateLimited() {
+    const now = Date.now();
+    if (now - lastAuthAttempt < 2000) return true;
+    lastAuthAttempt = now;
+    return false;
+}
 
 const userAuth = {
     register: async () => {
-        const user = document.getElementById('reg-user').value.trim();
-        const pass = document.getElementById('reg-pass').value.trim();
-        
-        if (!user || !pass) {
-            setFeedback("ISI SEMUA DATA", true);
+        if (isRateLimited()) {
+            setFeedback("> TUNGGU SEBENTAR...", true);
             return;
         }
 
+        const user = document.getElementById('reg-user').value.trim().toLowerCase();
+        const pass = document.getElementById('reg-pass').value.trim();
+        
+        if (!user || !pass) { setFeedback("> ISI SEMUA DATA", true); return; }
+        if (user.length < 3) { setFeedback("> USERNAME MIN 3 KARAKTER", true); return; }
+        if (pass.length < 6) { setFeedback("> PASSWORD MIN 6 KARAKTER", true); return; }
+
         const regBtn = document.querySelector('#page-register .btn-primary');
-        const originalText = regBtn.innerText;
         regBtn.disabled = true;
         regBtn.innerText = "PROSES...";
-        
-        const { data, error } = await supabaseClient.auth.signUp({
-            email: `${user}@guessit.game`, // Mock email for simple username login
-            password: pass,
-            options: {
-                data: { username: user }
-            }
-        });
+
+        // Check if user already exists
+        const { data: existing } = await supabaseClient
+            .from('users')
+            .select('username')
+            .eq('username', user)
+            .single();
+
+        if (existing) {
+            setFeedback("> USERNAME SUDAH DIPAKAI", true);
+            regBtn.disabled = false;
+            regBtn.innerText = "BUAT AKUN";
+            return;
+        }
+
+        const hashedPass = await hashPassword(pass);
+
+        const { error } = await supabaseClient
+            .from('users')
+            .insert([{ username: user, password_hash: hashedPass }]);
         
         if (error) {
-            if (error.status === 429) {
-                setFeedback("TERLALU BANYAK PERMINTAAN. TUNGGU SEBENTAR.", true);
-            } else {
-                setFeedback(error.message.toUpperCase(), true);
-            }
+            setFeedback(`> ERROR: ${error.message.toUpperCase()}`, true);
+            regBtn.disabled = false;
+            regBtn.innerText = "BUAT AKUN";
             return;
         }
         
-        setFeedback("DAFTAR BERHASIL. CEK EMAIL (JIKA AKTIF)", false);
+        setFeedback("> DAFTAR BERHASIL! SILAKAN LOGIN", false);
         setTimeout(() => showPage('page-login'), 1500);
     },
     
     login: async () => {
-        const user = document.getElementById('login-user').value.trim();
-        const pass = document.getElementById('login-pass').value.trim();
-        
-        const loginBtn = document.querySelector('#page-login .btn-primary');
-        const originalText = loginBtn.innerText;
-        loginBtn.disabled = true;
-        loginBtn.innerText = "COBA LOGIN...";
+        if (isRateLimited()) {
+            setFeedback("> TUNGGU SEBENTAR...", true);
+            return;
+        }
 
-        const { data, error } = await supabaseClient.auth.signInWithPassword({
-            email: `${user}@guessit.game`,
-            password: pass
-        });
+        const user = document.getElementById('login-user').value.trim().toLowerCase();
+        const pass = document.getElementById('login-pass').value.trim();
+
+        const loginBtn = document.querySelector('#page-login .btn-primary');
+        loginBtn.disabled = true;
+        loginBtn.innerText = "VERIFIKASI...";
+
+        const hashedPass = await hashPassword(pass);
+
+        const { data, error } = await supabaseClient
+            .from('users')
+            .select('username, password_hash')
+            .eq('username', user)
+            .eq('password_hash', hashedPass)
+            .single();
         
-        if (error) {
-            if (error.status === 429) {
-                setFeedback("LIMIT LOGIN TERCAPAI. TUNGGU 15 MENIT.", true);
-            } else {
-                setFeedback("DATA SALAH / BELUM VERIFIKASI", true);
-            }
+        if (error || !data) {
+            setFeedback("> DATA SALAH", true);
             triggerFlash('flash-red');
+            loginBtn.disabled = false;
+            loginBtn.innerText = "LOGIN";
             return;
         }
         
-        gameState.session = data.session;
-        gameState.currentUser = data.user.user_metadata.username;
+        // Set session manually
+        localStorage.setItem(SESSION_KEY, data.username);
+        gameState.currentUser = data.username;
         
         userAuth.updateUI();
         showPage('page-menu');
         triggerGlobalGlitch(300, 'success');
     },
     
-    logout: async () => {
-        await supabaseClient.auth.signOut();
+    logout: () => {
+        localStorage.removeItem(SESSION_KEY);
         gameState.currentUser = null;
-        gameState.session = null;
         userAuth.updateUI();
         showPage('page-menu');
         triggerGlobalGlitch(300, 'error');
     },
     
-    checkSession: async () => {
-        const { data: { session } } = await supabaseClient.auth.getSession();
-        if (session) {
-            gameState.session = session;
-            gameState.currentUser = session.user.user_metadata.username;
-        }
+    checkSession: () => {
+        const saved = localStorage.getItem(SESSION_KEY);
+        if (saved) gameState.currentUser = saved;
         userAuth.updateUI();
     },
     
