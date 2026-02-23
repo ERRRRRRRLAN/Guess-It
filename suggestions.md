@@ -6,6 +6,7 @@ Daftar ide dan pengembangan fitur untuk **GUESS IT | Cyber Arcade**. File ini ak
 - **Sistem Akun (Auth)**: Register, Login, & Sesi Persisten.
 - **Guest Mode**: Bermain tanpa login dengan prompt simpan skor setelah menang.
 - **Visual Glitch System**: Efek Datamoshing & Scanlines bertema.
+- **Pembersihan UI**: Menghapus fitur "Lihat Flowchart" agar fokus pada game.
 
 ## 🛠️ Tahap Pengembangan Berikutnya
 
