@@ -196,8 +196,8 @@ function showPage(pageId, isPopState = false) {
         backBtn.classList.add('visible');
     }
 
-    // Full Glitch Burst on every page transition
-    triggerPageTransitionGlitch();
+    // Transition Glitch
+    triggerGlobalGlitch();
 
     if (pageId === 'page-game') {
         inputField.value = '';
@@ -212,70 +212,6 @@ window.onpopstate = (e) => {
 };
 
 function goBack() { history.back(); }
-
-// Full glitch burst fired on EVERY page navigation
-function triggerPageTransitionGlitch() {
-    const wrapper = document.querySelector('.main-wrapper');
-    const scanline  = document.querySelector('.scanlines');
-    const duration  = 350;
-
-    // 1. Datamosh slice
-    wrapper.classList.remove('glitch-active');
-    void wrapper.offsetWidth;
-    wrapper.classList.add('glitch-active');
-
-    // 2. Position jitter
-    wrapper.classList.remove('wrapper-jitter');
-    void wrapper.offsetWidth;
-    wrapper.classList.add('wrapper-jitter');
-
-    // 3. Lightning light burst
-    wrapper.classList.remove('wrapper-light-burst');
-    void wrapper.offsetWidth;
-    wrapper.classList.add('wrapper-light-burst');
-
-    // 4. Scanline flicker
-    if (scanline) {
-        scanline.classList.remove('scanline-flicker');
-        void scanline.offsetWidth;
-        scanline.classList.add('scanline-flicker');
-    }
-
-    // 5. Neon streaks (2 buah)
-    const streaks = [];
-    for (let i = 0; i < 2; i++) {
-        const s = document.createElement('div');
-        s.className = 'neon-streak';
-        s.style.top = (Math.random() * 90 + 5) + '%';
-        s.style.setProperty('--streak-dur', (0.5 + Math.random() * 0.5) + 's');
-        s.style.setProperty('--streak-delay', (i * 0.07) + 's');
-        document.body.appendChild(s);
-        streaks.push(s);
-    }
-
-    // 6. Scan beam
-    const beam = document.createElement('div');
-    beam.className = 'scan-beam';
-    beam.style.setProperty('--beam-dur', (duration / 1000).toFixed(2) + 's');
-    wrapper.appendChild(beam);
-
-    // 7. H1 chromatic aberration
-    const h1 = document.querySelector('section.active h1');
-    if (h1) {
-        h1.classList.remove('h1-glitch');
-        void h1.offsetWidth;
-        h1.classList.add('h1-glitch');
-        setTimeout(() => h1.classList.remove('h1-glitch'), 420);
-    }
-
-    // Cleanup
-    setTimeout(() => {
-        wrapper.classList.remove('glitch-active', 'wrapper-jitter', 'wrapper-light-burst');
-        if (scanline) scanline.classList.remove('scanline-flicker');
-        beam.remove();
-        streaks.forEach(s => s.remove());
-    }, duration);
-}
 
 function startGame(level) {
     const config = difficulties[level];
@@ -372,6 +308,7 @@ function triggerGlobalGlitch(duration = 200, type = 'neutral') {
     const wrapper = document.querySelector('.main-wrapper');
     const scanline = document.querySelector('.scanlines');
     
+    // Determine class and colors
     let glitchClass = 'glitch-active';
     let blockGradient = 'repeating-linear-gradient(90deg, var(--neon-cyan), var(--neon-magenta) 50px)';
     
@@ -385,42 +322,11 @@ function triggerGlobalGlitch(duration = 200, type = 'neutral') {
 
     wrapper.classList.add(glitchClass);
     if (scanline) scanline.classList.add('scanline-flicker');
-
-    // Rapid Position Jitter + Light Burst on wrapper
-    const jitterClass = type === 'success' ? 'wrapper-light-burst' : 'wrapper-jitter';
-    wrapper.classList.remove(jitterClass);
-    void wrapper.offsetWidth; // reflow to restart animation
-    wrapper.classList.add(jitterClass);
-    setTimeout(() => wrapper.classList.remove(jitterClass), type === 'success' ? 280 : 320);
-
-    // H1 Chromatic Aberration
-    const h1 = document.querySelector('section.active h1');
-    if (h1) {
-        h1.classList.remove('h1-glitch');
-        void h1.offsetWidth;
-        h1.classList.add('h1-glitch');
-        setTimeout(() => h1.classList.remove('h1-glitch'), 420);
-    }
-
-    // Neon Light Streaks
-    const streakCount = type === 'neutral' ? 2 : 3;
-    const streaks = [];
-    for (let i = 0; i < streakCount; i++) {
-        const streak = document.createElement('div');
-        streak.className = 'neon-streak';
-        streak.style.top = (Math.random() * 95 + 2) + '%';
-        streak.style.setProperty('--streak-dur', (0.6 + Math.random() * 0.8) + 's');
-        streak.style.setProperty('--streak-delay', (i * 0.08) + 's');
-        if (type === 'error')   streak.style.background = 'linear-gradient(90deg, transparent, #ff3e00, #ff0000, transparent)';
-        if (type === 'success') streak.style.background = 'linear-gradient(90deg, transparent, #00f2ff, #ffffff, transparent)';
-        document.body.appendChild(streak);
-        streaks.push(streak);
-    }
-
-    // Signal blocks
+    
     const blocks = [];
     const count = type === 'neutral' ? 2 : 5;
-    for (let i = 0; i < count; i++) {
+    
+    for(let i=0; i<count; i++) {
         const b = document.createElement('div');
         b.className = 'signal-block';
         b.style.setProperty('--block-color', blockGradient);
@@ -430,39 +336,10 @@ function triggerGlobalGlitch(duration = 200, type = 'neutral') {
         blocks.push(b);
     }
 
-    // Glowing Scan Beam
-    const beam = document.createElement('div');
-    beam.className = 'scan-beam';
-    const beamDur = (duration / 1000).toFixed(2) + 's';
-    beam.style.setProperty('--beam-dur', beamDur);
-    if (type === 'error')   beam.style.setProperty('--beam-color', '#ff3e00');
-    if (type === 'success') beam.style.setProperty('--beam-color', '#00f2ff');
-    wrapper.appendChild(beam);
-
-    // Neon Glow Dot Particles
-    const dotColor = type === 'error' ? '#ff3e00' : type === 'success' ? '#00f2ff' : 'var(--neon-magenta)';
-    const dots = [];
-    const dotCount = type === 'neutral' ? 4 : 8;
-    for (let i = 0; i < dotCount; i++) {
-        const dot = document.createElement('div');
-        dot.className = 'glow-dot';
-        dot.style.left = (Math.random() * 90 + 5) + '%';
-        dot.style.top  = (Math.random() * 90 + 5) + '%';
-        dot.style.setProperty('--dot-color', dotColor);
-        dot.style.setProperty('--dx', (Math.random() * 60 - 30) + 'px');
-        dot.style.setProperty('--dy', (Math.random() * -50 - 10) + 'px');
-        dot.style.setProperty('--dot-dur', (0.25 + Math.random() * 0.3) + 's');
-        wrapper.appendChild(dot);
-        dots.push(dot);
-    }
-
     setTimeout(() => {
         wrapper.classList.remove(glitchClass);
         if (scanline) scanline.classList.remove('scanline-flicker');
         blocks.forEach(b => b.remove());
-        streaks.forEach(s => s.remove());
-        beam.remove();
-        dots.forEach(d => d.remove());
     }, duration);
 }
 
