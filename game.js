@@ -359,11 +359,39 @@ function triggerGlobalGlitch(duration = 200, type = 'neutral') {
         blocks.push(b);
     }
 
+    // Glowing Scan Beam
+    const beam = document.createElement('div');
+    beam.className = 'scan-beam';
+    const beamDur = (duration / 1000).toFixed(2) + 's';
+    beam.style.setProperty('--beam-dur', beamDur);
+    if (type === 'error')   beam.style.setProperty('--beam-color', '#ff3e00');
+    if (type === 'success') beam.style.setProperty('--beam-color', '#00f2ff');
+    wrapper.appendChild(beam);
+
+    // Neon Glow Dot Particles
+    const dotColor = type === 'error' ? '#ff3e00' : type === 'success' ? '#00f2ff' : 'var(--neon-magenta)';
+    const dots = [];
+    const dotCount = type === 'neutral' ? 4 : 8;
+    for (let i = 0; i < dotCount; i++) {
+        const dot = document.createElement('div');
+        dot.className = 'glow-dot';
+        dot.style.left = (Math.random() * 90 + 5) + '%';
+        dot.style.top  = (Math.random() * 90 + 5) + '%';
+        dot.style.setProperty('--dot-color', dotColor);
+        dot.style.setProperty('--dx', (Math.random() * 60 - 30) + 'px');
+        dot.style.setProperty('--dy', (Math.random() * -50 - 10) + 'px');
+        dot.style.setProperty('--dot-dur', (0.25 + Math.random() * 0.3) + 's');
+        wrapper.appendChild(dot);
+        dots.push(dot);
+    }
+
     setTimeout(() => {
         wrapper.classList.remove(glitchClass);
         if (scanline) scanline.classList.remove('scanline-flicker');
         blocks.forEach(b => b.remove());
         streaks.forEach(s => s.remove());
+        beam.remove();
+        dots.forEach(d => d.remove());
     }, duration);
 }
 
