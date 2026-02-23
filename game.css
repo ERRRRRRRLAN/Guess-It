@@ -988,3 +988,89 @@ input:focus, #player-name:focus {
         width: 100%;
     }
 }
+
+/* ============================================
+   MATCHMAKING SCREEN
+   ============================================ */
+.matchmaking-screen {
+    text-align: center;
+    padding: 3rem 1rem;
+    position: relative;
+}
+
+.matchmaking-pulse {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    border: 2px solid var(--neon-cyan);
+    margin: 0 auto 2rem auto;
+    animation: mm-pulse 1.5s ease-in-out infinite;
+    position: relative;
+}
+
+.matchmaking-pulse::after {
+    content: '⚔';
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.5rem;
+}
+
+@keyframes mm-pulse {
+    0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(0, 242, 255, 0.4);
+        border-color: var(--neon-cyan);
+    }
+    50% {
+        transform: scale(1.1);
+        box-shadow: 0 0 30px 10px rgba(0, 242, 255, 0.2);
+        border-color: var(--neon-magenta);
+    }
+}
+
+.matchmaking-difficulty {
+    font-family: var(--font-data);
+    font-size: 0.75rem;
+    color: var(--neon-magenta);
+    letter-spacing: 2px;
+    margin-top: 1rem;
+}
+
+/* ============================================
+   OPPONENT PANEL (read-only)
+   ============================================ */
+.duel-panel-opponent {
+    position: relative;
+}
+
+.duel-panel-opponent .input-section,
+.duel-panel-opponent .btn {
+    display: none;
+}
+
+.opp-status-overlay {
+    padding: 1rem;
+    text-align: center;
+    font-family: var(--font-data);
+    font-size: 0.7rem;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    border: 1px dashed rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.02);
+    margin: 0.5rem 0;
+}
+
+.duel-label-me {
+    color: var(--neon-cyan) !important;
+    text-shadow: 0 0 10px rgba(0, 242, 255, 0.4) !important;
+}
+
+.duel-opponent-name {
+    font-family: var(--font-data);
+    font-size: 0.8rem;
+    color: var(--neon-cyan);
+    letter-spacing: 2px;
+}

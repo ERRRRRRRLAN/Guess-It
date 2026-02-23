@@ -64,23 +64,34 @@
             </div>
         </section>
 
-        <!-- Section: Difficulty Selection (Solo) -->
+        <!-- Section: Difficulty Selection -->
         <section id="page-difficulty">
             <h1>LEVEL.</h1>
             <p class="subtitle" id="diff-subtitle">&gt; PILIH_LEVEL</p>
             <div class="diff-list">
                 <div class="diff-btn" onclick="startGame('easy')">
                     <span class="diff-name">MUDAH</span>
-                    <span class="diff-info">1-10 [5_NYAWA]</span>
+                    <span class="diff-info">1-10 [5_NYAWA] ×0.5</span>
                 </div>
                 <div class="diff-btn" onclick="startGame('medium')">
                     <span class="diff-name">SEDANG</span>
-                    <span class="diff-info">1-50 [7_NYAWA]</span>
+                    <span class="diff-info">1-50 [7_NYAWA] ×1.0</span>
                 </div>
                 <div class="diff-btn" onclick="startGame('hard')">
                     <span class="diff-name">SULIT</span>
-                    <span class="diff-info">1-100 [10_NYAWA]</span>
+                    <span class="diff-info">1-100 [10_NYAWA] ×1.5</span>
                 </div>
+            </div>
+        </section>
+
+        <!-- Section: Matchmaking -->
+        <section id="page-matchmaking">
+            <div class="matchmaking-screen">
+                <div class="matchmaking-pulse"></div>
+                <h1>MENCARI<br>LAWAN.</h1>
+                <p class="subtitle" id="matchmaking-status">&gt; MENUNGGU_PLAYER_LAIN...</p>
+                <p class="matchmaking-difficulty" id="matchmaking-diff-label">LEVEL: -</p>
+                <button class="btn btn-outline" onclick="cancelMatchmaking()" style="margin-top: 2rem;">BATALKAN</button>
             </div>
         </section>
 
@@ -139,58 +150,58 @@
 
     </div>
 
-    <!-- Duel Arena (outside main-wrapper, full-width) -->
+    <!-- Duel Arena (full-screen overlay) -->
     <div class="duel-arena" id="duel-arena" style="display:none;">
         <header class="nav-header duel-nav">
-            <button class="back-btn visible" onclick="exitDuel()">Kembali</button>
+            <button class="back-btn visible" onclick="exitDuel()">Keluar</button>
             <div class="duel-vs-label">VS</div>
+            <div class="duel-opponent-name" id="duel-opponent-name">LAWAN</div>
         </header>
 
         <div class="duel-panels">
-            <!-- Player 1 Panel -->
-            <div class="duel-panel" id="duel-p1">
-                <h2 class="duel-player-label">PLAYER 1</h2>
-                <div class="stopwatch" id="stopwatch-p1">00:00.0</div>
-                <div class="hearts-container" id="hearts-p1"></div>
+            <!-- MY Panel (left) -->
+            <div class="duel-panel" id="duel-my">
+                <h2 class="duel-player-label duel-label-me">KAMU</h2>
+                <div class="stopwatch" id="stopwatch-my">00:00.0</div>
+                <div class="hearts-container" id="hearts-my"></div>
                 <div class="stat-row">
                     <div class="stat-cell">
                         <span class="stat-label">MIN</span>
-                        <span class="stat-value" id="low-p1">0</span>
+                        <span class="stat-value" id="low-my">0</span>
                     </div>
                     <div class="stat-cell">
                         <span class="stat-label">MAX</span>
-                        <span class="stat-value" id="high-p1">0</span>
+                        <span class="stat-value" id="high-my">0</span>
                     </div>
                 </div>
-                <div class="feedback-area" id="feedback-p1"></div>
+                <div class="feedback-area" id="feedback-my"></div>
                 <div class="input-section">
-                    <input type="number" id="guess-p1" placeholder="00">
+                    <input type="number" id="guess-my" placeholder="00">
                 </div>
-                <button class="btn btn-primary" style="width:100%;" onclick="checkDuelGuess(1)">TEBAK</button>
-                <div class="history-bar" id="history-p1"></div>
+                <button class="btn btn-primary" style="width:100%;" onclick="submitDuelGuess()">TEBAK</button>
+                <div class="history-bar" id="history-my"></div>
             </div>
 
-            <!-- Player 2 Panel -->
-            <div class="duel-panel" id="duel-p2">
-                <h2 class="duel-player-label">PLAYER 2</h2>
-                <div class="stopwatch" id="stopwatch-p2">00:00.0</div>
-                <div class="hearts-container" id="hearts-p2"></div>
+            <!-- OPPONENT Panel (right, read-only) -->
+            <div class="duel-panel duel-panel-opponent" id="duel-opp">
+                <h2 class="duel-player-label" id="opp-label">LAWAN</h2>
+                <div class="stopwatch" id="stopwatch-opp">00:00.0</div>
+                <div class="hearts-container" id="hearts-opp"></div>
                 <div class="stat-row">
                     <div class="stat-cell">
                         <span class="stat-label">MIN</span>
-                        <span class="stat-value" id="low-p2">0</span>
+                        <span class="stat-value" id="low-opp">0</span>
                     </div>
                     <div class="stat-cell">
                         <span class="stat-label">MAX</span>
-                        <span class="stat-value" id="high-p2">0</span>
+                        <span class="stat-value" id="high-opp">0</span>
                     </div>
                 </div>
-                <div class="feedback-area" id="feedback-p2"></div>
-                <div class="input-section">
-                    <input type="number" id="guess-p2" placeholder="00">
+                <div class="feedback-area" id="feedback-opp"></div>
+                <div class="opp-status-overlay" id="opp-status">
+                    <span>MENUNGGU TEBAKAN...</span>
                 </div>
-                <button class="btn btn-primary" style="width:100%;" onclick="checkDuelGuess(2)">TEBAK</button>
-                <div class="history-bar" id="history-p2"></div>
+                <div class="history-bar" id="history-opp"></div>
             </div>
         </div>
     </div>
