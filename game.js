@@ -28,6 +28,11 @@ const userAuth = {
             setFeedback("ISI SEMUA DATA", true);
             return;
         }
+
+        const regBtn = document.querySelector('#page-register .btn-primary');
+        const originalText = regBtn.innerText;
+        regBtn.disabled = true;
+        regBtn.innerText = "PROSES...";
         
         const { data, error } = await supabaseClient.auth.signUp({
             email: `${user}@guessit.game`, // Mock email for simple username login
