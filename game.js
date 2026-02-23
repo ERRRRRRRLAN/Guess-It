@@ -820,11 +820,17 @@ async function loadUserPoints() {
             else if (row.mode === 'duel') dp += row.points || 0;
         });
     }
-    document.getElementById('display-sp').innerText = formatPoints(sp);
-    document.getElementById('display-dp').innerText = formatPoints(dp);
+    document.getElementById('display-sp').innerText = formatNumber(sp);
+    document.getElementById('display-dp').innerText = formatNumber(dp);
 }
 
-function formatPoints(n) {
+// Full number with dot separator (Indonesian style: 100.000)
+function formatNumber(n) {
+    return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
+// Abbreviated for leaderboard (10.6K)
+function formatPointsShort(n) {
     if (n > 9999) return (n / 1000).toFixed(1) + 'K';
     return n;
 }
@@ -885,7 +891,7 @@ async function loadLeaderboardData(mode) {
                 <span class="diff-tag">${entry.difficulty.toUpperCase()}</span>
             </div>
             <div style="display:flex; align-items:center; gap:1rem;">
-                <span class="score-value">${entry.points || 0} ${pointLabel}</span>
+                <span class="score-value">${formatPointsShort(entry.points || 0)} ${pointLabel}</span>
                 <span style="font-size:0.6rem; color:var(--text-dim);">${dateStr}</span>
             </div>`;
         container.appendChild(el);
