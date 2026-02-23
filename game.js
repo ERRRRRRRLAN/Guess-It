@@ -75,13 +75,16 @@ const userAuth = {
         userAuth.updateUI();
     },
     updateUI: () => {
+        const profile = document.getElementById('user-profile');
         const display = document.getElementById('display-username');
         const authActions = document.getElementById('auth-actions');
         const logoutBtn = document.querySelector('.logout-btn');
         if (gameState.currentUser) {
+            profile.style.display = 'flex';
             display.innerText = gameState.currentUser.toUpperCase();
             logoutBtn.style.display = 'block'; authActions.style.display = 'none';
         } else {
+            profile.style.display = 'flex';
             display.innerText = "GUEST";
             logoutBtn.style.display = 'none'; authActions.style.display = 'flex';
         }
