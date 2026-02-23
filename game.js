@@ -159,8 +159,24 @@ function showPage(pageId, isPopState = false) {
     if (pageId === 'page-menu' && gameState.currentUser) loadUserPoints();
 }
 
-window.onpopstate = (e) => { showPage(e.state ? e.state.pageId : 'page-menu', true); };
-function goBack() { history.back(); }
+window.onpopstate = (e) => {
+    const target = e.state ? e.state.pageId : 'page-menu';
+    cleanupActiveGame();
+    showPage(target, true);
+};
+
+function goBack() {
+    cleanupActiveGame();
+    history.back();
+}
+
+function cleanupActiveGame() {
+    // Stop solo timer if running
+    if (soloTimer) {
+        stopTimer(soloTimer);
+        soloTimer = null;
+    }
+}
 
 // ============================================================
 // MODE SELECTION
@@ -660,6 +676,27 @@ function broadcastGuessResult(data) {
 function handleOpponentBroadcast(data) {
     if (data.sender === gameState.currentUser) return; // Ignore own broadcasts
 
+    // Handle opponent forfeit
+    if (data.forfeit) {
+        duel.oppDone = true;
+        duel.oppWon = false;
+        clearInterval(duel.oppTimerInterval);
+        document.getElementById('feedback-opp').innerHTML = '✗ MENYERAH';
+        document.getElementById('duel-opp').classList.add('finished');
+        document.getElementById('opp-status').innerHTML = '<span>MENYERAH</span>';
+
+        // Auto-finish my game as winner
+        if (!duel.done) {
+            duel.done = true;
+            duel.won = true;
+            duel.timeSec = stopTimer(duel.timer);
+            duel.points = calcPoints(duel.timeSec, duel.wrong, duel.difficulty);
+            document.getElementById('duel-my').classList.add('finished', 'winner');
+        }
+        showDuelResult();
+        return;
+    }
+
     if (data.won === true) {
         // Opponent won
         duel.oppDone = true;
@@ -764,6 +801,23 @@ function showDuelResult() {
 }
 
 function exitDuel() {
+    // Check if duel game is actively in progress (not finished)
+    const isGameActive = duel.channel && !document.getElementById('duel-result-overlay').style.display.includes('flex');
+
+    if (isGameActive) {
+        const confirmed = confirm('Jika kamu keluar, kamu akan KALAH dan tidak mendapatkan poin. Yakin ingin keluar?');
+        if (!confirmed) return;
+
+        // Broadcast forfeit to opponent
+        if (duel.channel) {
+            duel.channel.send({
+                type: 'broadcast',
+                event: 'guess',
+                payload: { sender: gameState.currentUser, forfeit: true }
+            });
+        }
+    }
+
     stopTimer(duel.timer);
     if (duel.oppTimerInterval) clearInterval(duel.oppTimerInterval);
     if (duel.channel) { supabaseClient.removeChannel(duel.channel); duel.channel = null; }
@@ -771,6 +825,7 @@ function exitDuel() {
     document.getElementById('duel-arena').style.display = 'none';
     document.getElementById('duel-result-overlay').style.display = 'none';
     document.getElementById('main-wrapper-solo').style.display = '';
+    showPage('page-menu');
 }
 
 // ============================================================
