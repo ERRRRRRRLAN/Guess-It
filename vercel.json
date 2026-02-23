@@ -14,7 +14,7 @@
       "use": "@vercel/static"
     },
     {
-      "src": "bgm.mp3",
+      "src": "*.mp3",
       "use": "@vercel/static"
     },
     {

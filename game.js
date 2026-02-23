@@ -118,6 +118,13 @@ function initBGM() {
     const bgm = document.getElementById('bgm');
     bgm.volume = 0.3;
 
+    // Attach hover sound to all buttons
+    document.addEventListener('mouseover', (e) => {
+        if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
+            playSFX('hover');
+        }
+    });
+
     // Auto-play on first user interaction (browser policy)
     const startBGM = () => {
         bgm.play().then(() => {
@@ -146,7 +153,26 @@ function toggleBGM() {
 }
 
 // ============================================================
-// ONLINE PRESENCE TRACKING
+// SOUND EFFECTS
+// ============================================================
+const sfx = {
+    hover: new Audio('hover.mp3'),
+    pageOpen: new Audio('page-open.mp3'),
+    pageBack: new Audio('page-back.mp3'),
+    wrong: new Audio('error or wrong.mp3'),
+    win: new Audio('win.mp3'),
+    lose: new Audio('lose.mp3'),
+};
+
+// Set volume for all SFX
+Object.values(sfx).forEach(a => { a.volume = 0.5; a.preload = 'auto'; });
+
+function playSFX(name) {
+    const sound = sfx[name];
+    if (!sound) return;
+    sound.currentTime = 0;
+    sound.play().catch(() => {});
+}
 // ============================================================
 let presenceChannel = null;
 
@@ -190,6 +216,7 @@ const inputField = document.getElementById('guess-input');
 const backBtn = document.getElementById('back-btn');
 
 function showPage(pageId, isPopState = false) {
+    playSFX('pageOpen');
     document.getElementById('duel-arena').style.display = 'none';
     document.getElementById('main-wrapper-solo').style.display = '';
     pages.forEach(id => {
@@ -211,6 +238,7 @@ window.onpopstate = (e) => {
 };
 
 function goBack() {
+    playSFX('pageBack');
     cleanupActiveGame();
     history.back();
 }
@@ -343,7 +371,7 @@ function checkGuess() {
         if (gameState.currentUser) {
             saveScore(gameState.difficulty, gameState.history.length, gameState.currentUser.toUpperCase(), 'solo', sp, Math.round(elapsed));
         }
-
+        playSFX('win');
         showSoloResult(true, elapsed, sp);
     } else {
         gameState.currentLives--; gameState.wrongGuesses++;
@@ -351,8 +379,10 @@ function checkGuess() {
         triggerFlash('flash-red'); triggerGlobalGlitch(250, 'error');
         if (gameState.currentLives <= 0) {
             const elapsed = stopTimer(soloTimer);
+            playSFX('lose');
             showSoloResult(false, elapsed, 0);
         } else {
+            playSFX('wrong');
             let hint;
             if (guess < gameState.targetNumber) {
                 gameState.minRange = Math.max(gameState.minRange, guess + 1);
@@ -656,6 +686,7 @@ function submitDuelGuess() {
         document.getElementById('feedback-my').innerHTML = `✓ BENAR! ${duel.points} DP`;
         document.getElementById('duel-my').classList.add('finished', 'winner');
         triggerFlash('flash-cyan');
+        playSFX('win');
 
         // Broadcast to opponent
         broadcastGuessResult({ won: true, timeSec: duel.timeSec, points: duel.points, wrong: duel.wrong, totalGuesses: duel.history.length });
@@ -680,6 +711,7 @@ function submitDuelGuess() {
 
             document.getElementById('feedback-my').innerHTML = `✗ KALAH! Angka: ${duel.myTarget}`;
             document.getElementById('duel-my').classList.add('finished');
+            playSFX('lose');
 
             broadcastGuessResult({ won: false, timeSec: duel.timeSec, points: 0, wrong: duel.wrong, totalGuesses: duel.history.length });
 
@@ -696,6 +728,7 @@ function submitDuelGuess() {
             document.getElementById('feedback-my').innerHTML = feedbackText;
             document.getElementById('low-my').innerText = duel.min;
             document.getElementById('high-my').innerText = duel.max;
+            playSFX('wrong');
             input.value = ''; input.focus();
 
             // Broadcast range/lives update
@@ -729,6 +762,7 @@ function handleOpponentBroadcast(data) {
         document.getElementById('feedback-opp').innerHTML = '✗ MENYERAH';
         document.getElementById('duel-opp').classList.add('finished');
         document.getElementById('opp-status').innerHTML = '<span>MENYERAH</span>';
+        playSFX('win');
 
         // Auto-finish my game as winner
         if (!duel.done) {
