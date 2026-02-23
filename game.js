@@ -739,11 +739,37 @@ function exitDuel() {
 // ============================================================
 async function saveScore(difficulty, attempts, name, mode, points, timeSec) {
     if (!supabaseClient) return;
-    const { error } = await supabaseClient.from('scores').insert([{
-        username: name, difficulty: difficulty, attempts: attempts,
-        mode: mode || 'solo', points: points || 0, time_seconds: timeSec || 0
-    }]);
-    if (error) console.error("Error saving score:", error);
+    const m = mode || 'solo';
+    const p = points || 0;
+
+    // Check for existing record for this user+mode
+    const { data: existing } = await supabaseClient
+        .from('scores')
+        .select('id, points')
+        .eq('username', name)
+        .eq('mode', m)
+        .maybeSingle();
+
+    if (existing) {
+        // Accumulate points
+        const { error } = await supabaseClient
+            .from('scores')
+            .update({
+                points: existing.points + p,
+                difficulty: difficulty,
+                attempts: attempts,
+                time_seconds: timeSec || 0
+            })
+            .eq('id', existing.id);
+        if (error) console.error("Error updating score:", error);
+    } else {
+        // First time — insert
+        const { error } = await supabaseClient.from('scores').insert([{
+            username: name, difficulty: difficulty, attempts: attempts,
+            mode: m, points: p, time_seconds: timeSec || 0
+        }]);
+        if (error) console.error("Error inserting score:", error);
+    }
 }
 
 async function handleSaveScore(timeSec, points) {
