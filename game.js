@@ -300,29 +300,11 @@ function updateHistoryUI(guess) {
 // Leaderboard Logic
 const STORAGE_KEY = 'guess_it_scores';
 
-// Mock Data Seeding
+// Mock Data Seeding (Disabled for production)
 function seedLeaderboard() {
-    if (localStorage.getItem(STORAGE_KEY)) return; // Don't overwrite existing data
-    
-    const dumpData = {
-        easy: [
-            { name: "SISTEM", attempts: 1, date: "11/02/2026" },
-            { name: "ALEX", attempts: 3, date: "10/02/2026" },
-            { name: "ZARA", attempts: 5, date: "09/02/2026" }
-        ],
-        medium: [
-            { name: "SISTEM", attempts: 3, date: "11/02/2026" },
-            { name: "KAEL", attempts: 5, date: "10/02/2026" },
-            { name: "JAX", attempts: 8, date: "08/02/2026" }
-        ],
-        hard: [
-            { name: "SISTEM", attempts: 5, date: "11/02/2026" },
-            { name: "NOX", attempts: 10, date: "10/02/2026" },
-            { name: "VEX", attempts: 15, date: "07/02/2026" }
-        ]
-    };
-    
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(dumpData));
+    if (localStorage.getItem(STORAGE_KEY)) return;
+    const emptyData = { easy: [], medium: [], hard: [] };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(emptyData));
 }
 
 // Call seeding on load
