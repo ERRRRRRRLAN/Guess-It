@@ -1108,3 +1108,32 @@ input:focus, #player-name:focus {
     color: var(--neon-magenta);
     text-shadow: 0 0 10px rgba(255, 0, 255, 0.4);
 }
+
+/* ============================================
+   ONLINE INDICATOR
+   ============================================ */
+.online-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    font-family: var(--font-data);
+    font-size: 0.65rem;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    margin-bottom: 1rem;
+}
+
+.online-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #00ff88;
+    box-shadow: 0 0 6px #00ff88, 0 0 12px rgba(0, 255, 136, 0.4);
+    animation: dot-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes dot-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}

@@ -95,7 +95,38 @@ const userAuth = {
     }
 };
 
-document.addEventListener('DOMContentLoaded', () => { userAuth.checkSession(); });
+document.addEventListener('DOMContentLoaded', () => {
+    userAuth.checkSession();
+    initPresence();
+});
+
+// ============================================================
+// ONLINE PRESENCE TRACKING
+// ============================================================
+let presenceChannel = null;
+
+function initPresence() {
+    if (!supabaseClient) return;
+
+    presenceChannel = supabaseClient.channel('online-users', {
+        config: { presence: { key: Math.random().toString(36).substr(2, 9) } }
+    });
+
+    presenceChannel
+        .on('presence', { event: 'sync' }, () => {
+            const state = presenceChannel.presenceState();
+            const count = Object.keys(state).length;
+            document.getElementById('online-count').innerText = count;
+        })
+        .subscribe(async (status) => {
+            if (status === 'SUBSCRIBED') {
+                await presenceChannel.track({
+                    user: gameState.currentUser || 'guest',
+                    online_at: new Date().toISOString()
+                });
+            }
+        });
+}
 
 // ============================================================
 // DIFFICULTIES & MULTIPLIER
