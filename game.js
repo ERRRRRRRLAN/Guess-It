@@ -79,17 +79,16 @@ const userAuth = {
     updateUI: () => {
         const profile = document.getElementById('user-profile');
         const display = document.getElementById('display-username');
-        const menuActions = document.getElementById('menu-actions');
         const authActions = document.getElementById('auth-actions');
         
         if (gameState.currentUser) {
             profile.style.display = 'flex';
             display.innerText = gameState.currentUser.toUpperCase();
-            menuActions.style.display = 'flex';
             authActions.style.display = 'none';
         } else {
-            profile.style.display = 'none';
-            menuActions.style.display = 'none';
+            profile.style.display = 'flex';
+            display.innerText = "GUEST";
+            document.querySelector('.logout-btn').style.display = 'none';
             authActions.style.display = 'flex';
         }
     }
@@ -397,14 +396,26 @@ function showResult(isWin) {
     let extraInfo = "";
     if (isWin) {
         const attempts = gameState.history.length;
-        const defaultName = gameState.currentUser || "PEMAIN";
-        extraInfo = `
-            <div class="win-text-small">Diselesaikan dalam ${attempts} tebakan!</div>
-            <div class="name-entry-area">
-                <input type="text" id="player-name" value="${defaultName.toUpperCase()}" placeholder="MASUKKAN NAMA" maxlength="10">
-                <button class="btn btn-primary" id="save-score-btn" onclick="handleSaveScore()">SIMPAN REKOR</button>
-            </div>
-        `;
+        if (gameState.currentUser) {
+            extraInfo = `
+                <div class="win-text-small">Diselesaikan dalam ${attempts} tebakan!</div>
+                <div class="name-entry-area">
+                    <input type="text" id="player-name" value="${gameState.currentUser.toUpperCase()}" placeholder="MASUKKAN NAMA" maxlength="10">
+                    <button class="btn btn-primary" id="save-score-btn" onclick="handleSaveScore()">SIMPAN REKOR</button>
+                </div>
+            `;
+        } else {
+            extraInfo = `
+                <div class="win-text-small">Diselesaikan dalam ${attempts} tebakan!</div>
+                <div class="guest-notice">
+                    <p>&gt; DAFTAR_LOGIN_UNTUK_SIMPAN_SKOR</p>
+                    <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                        <button class="btn btn-outline" style="font-size: 0.7rem; padding: 0.5rem;" onclick="showPage('page-login')">LOGIN Sekarang</button>
+                        <button class="btn btn-outline" style="font-size: 0.7rem; padding: 0.5rem;" onclick="showPage('page-register')">BUAT AKUN</button>
+                    </div>
+                </div>
+            `;
+        }
     }
 
     content.innerHTML = `

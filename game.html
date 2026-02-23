@@ -27,14 +27,13 @@
             </div>
             <h1>GUESS<br>IT.</h1>
             <p class="subtitle">&gt; ASAH_LOGIKA_&_INSTING</p>
-            <div id="menu-actions" style="display: flex; flex-direction: column; gap: 0.75rem;">
+            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
                 <button class="btn btn-primary" id="play-btn" onclick="showPage('page-difficulty')">MULAI MAIN</button>
+                <div id="auth-actions" style="display: none; flex-direction: column; gap: 0.75rem;">
+                    <button class="btn btn-outline" onclick="showPage('page-login')">LOGIN</button>
+                </div>
                 <button class="btn" onclick="showLeaderboard()">SKOR TERTINGGI</button>
                 <button class="btn btn-outline" style="border-color: rgba(0, 242, 255, 0.2); opacity: 0.6;" onclick="window.location.href='index.html'">LIHAT FLOWCHART</button>
-            </div>
-            <div id="auth-actions" style="display: none; flex-direction: column; gap: 0.75rem;">
-                <button class="btn btn-primary" onclick="showPage('page-login')">LOGIN</button>
-                <button class="btn btn-outline" onclick="showPage('page-register')">DAFTAR AKUN</button>
             </div>
         </section>
 

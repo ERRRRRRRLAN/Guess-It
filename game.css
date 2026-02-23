@@ -637,6 +637,17 @@ input[type="number"]:focus {
     text-decoration: underline;
 }
 
-.auth-toggle span:hover {
-    filter: brightness(1.2);
+.guest-notice {
+    margin-top: 1.5rem;
+    padding: 1.5rem;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px dashed rgba(255, 255, 255, 0.1);
+    text-align: center;
+}
+
+.guest-notice p {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    font-family: var(--font-data);
+    margin-bottom: 0.5rem;
 }
