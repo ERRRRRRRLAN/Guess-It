@@ -393,18 +393,38 @@ input[type="number"]:focus {
     overflow: hidden;
 }
 
-/* Variant: Error Glitch (Red/Chaotic) */
+/* Variant: Error Glitch (Red/Chaotic/Flickering) */
 .glitch-error {
-    animation: datamosh-slice 0.15s steps(3, end) both infinite;
-    filter: saturate(2) hue-rotate(-10deg);
+    animation: 
+        datamosh-slice 0.1s steps(2, end) infinite,
+        violent-jitter 0.08s steps(2) infinite;
+    filter: saturate(4) contrast(1.5) hue-rotate(-15deg);
+    position: relative;
 }
+
+/* Hard red flicker overlay */
 .glitch-error::before {
     content: '';
     position: absolute;
-    inset: 0;
-    background: rgba(255, 0, 0, 0.1);
-    z-index: 5;
+    inset: -10px;
+    background: rgba(255, 0, 0, 0.2);
+    z-index: 50;
     pointer-events: none;
+    animation: fast-flicker 0.05s infinite;
+}
+
+@keyframes fast-flicker {
+    0%, 100% { opacity: 0; }
+    50% { opacity: 1; background: rgba(255, 0, 0, 0.3); }
+}
+
+@keyframes violent-jitter {
+    0% { transform: translate(0,0) scale(1.0); }
+    20% { transform: translate(-25px, 15px) scale(1.02) skewX(10deg); }
+    40% { transform: translate(30px, -20px) scale(0.98) skewY(-5deg); }
+    60% { transform: translate(-15px, 25px) scale(1.05) rotate(1deg); }
+    80% { transform: translate(20px, -10px) scale(1.0) skewX(-10deg); }
+    100% { transform: translate(0,0) scale(1.0); }
 }
 
 /* Variant: Success Glitch (Cyan/Clean) */
