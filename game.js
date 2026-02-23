@@ -107,6 +107,13 @@ document.addEventListener('DOMContentLoaded', () => {
     userAuth.checkSession();
     initPresence();
     initBGM();
+
+    // Handle initial routing from hash
+    const hash = window.location.hash.substring(1);
+    const validPages = ['page-menu', 'page-difficulty', 'page-game', 'page-result', 'page-leaderboard', 'page-login', 'page-register', 'page-matchmaking'];
+    if (hash && validPages.includes(hash)) {
+        showPage(hash, true);
+    }
 });
 
 // ============================================================
