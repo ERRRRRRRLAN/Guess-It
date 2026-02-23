@@ -308,7 +308,6 @@ function triggerGlobalGlitch(duration = 200, type = 'neutral') {
     const wrapper = document.querySelector('.main-wrapper');
     const scanline = document.querySelector('.scanlines');
     
-    // Determine class and colors
     let glitchClass = 'glitch-active';
     let blockGradient = 'repeating-linear-gradient(90deg, var(--neon-cyan), var(--neon-magenta) 50px)';
     
@@ -322,11 +321,35 @@ function triggerGlobalGlitch(duration = 200, type = 'neutral') {
 
     wrapper.classList.add(glitchClass);
     if (scanline) scanline.classList.add('scanline-flicker');
-    
+
+    // H1 Chromatic Aberration
+    const h1 = document.querySelector('section.active h1');
+    if (h1) {
+        h1.classList.remove('h1-glitch');
+        void h1.offsetWidth;
+        h1.classList.add('h1-glitch');
+        setTimeout(() => h1.classList.remove('h1-glitch'), 420);
+    }
+
+    // Neon Light Streaks
+    const streakCount = type === 'neutral' ? 2 : 3;
+    const streaks = [];
+    for (let i = 0; i < streakCount; i++) {
+        const streak = document.createElement('div');
+        streak.className = 'neon-streak';
+        streak.style.top = (Math.random() * 95 + 2) + '%';
+        streak.style.setProperty('--streak-dur', (0.6 + Math.random() * 0.8) + 's');
+        streak.style.setProperty('--streak-delay', (i * 0.08) + 's');
+        if (type === 'error')   streak.style.background = 'linear-gradient(90deg, transparent, #ff3e00, #ff0000, transparent)';
+        if (type === 'success') streak.style.background = 'linear-gradient(90deg, transparent, #00f2ff, #ffffff, transparent)';
+        document.body.appendChild(streak);
+        streaks.push(streak);
+    }
+
+    // Signal blocks
     const blocks = [];
     const count = type === 'neutral' ? 2 : 5;
-    
-    for(let i=0; i<count; i++) {
+    for (let i = 0; i < count; i++) {
         const b = document.createElement('div');
         b.className = 'signal-block';
         b.style.setProperty('--block-color', blockGradient);
@@ -340,6 +363,7 @@ function triggerGlobalGlitch(duration = 200, type = 'neutral') {
         wrapper.classList.remove(glitchClass);
         if (scanline) scanline.classList.remove('scanline-flicker');
         blocks.forEach(b => b.remove());
+        streaks.forEach(s => s.remove());
     }, duration);
 }
 

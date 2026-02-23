@@ -173,6 +173,22 @@ h1 {
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
+    position: relative;
+}
+
+/* Chromatic Aberration on H1 */
+h1::before,
+h1::after {
+    content: attr(data-text);
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(to bottom, #fff, #888);
+    -webkit-background-clip: text;
+    background-clip: text;
+    pointer-events: none;
+    opacity: 0;
 }
 
 .subtitle {
@@ -386,55 +402,66 @@ input[type="number"]:focus {
 .win-color { color: var(--neon-cyan); text-shadow: 0 0 20px var(--neon-cyan); }
 .lose-color { color: var(--accent-red); text-shadow: 0 0 20px var(--accent-red); }
 
-/* Datamosh & Scanline Effects */
+/* ============================================
+   ENHANCED GLITCH SYSTEM
+   ============================================ */
+
+/* Base glitch class */
 .glitch-active {
     animation: datamosh-slice 0.2s steps(2, end) both;
     position: relative;
     overflow: hidden;
 }
 
-/* Variant: Error Glitch (Red/Chaotic) */
+/* Error Glitch — red chaos + scan overlay */
 .glitch-error {
-    animation: datamosh-slice 0.15s steps(3, end) both infinite;
+    animation: datamosh-slice 0.15s steps(3, end) both;
     filter: saturate(2) hue-rotate(-10deg);
 }
 .glitch-error::before {
     content: '';
     position: absolute;
     inset: 0;
-    background: rgba(255, 0, 0, 0.1);
+    background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(255, 0, 0, 0.06) 2px,
+        rgba(255, 0, 0, 0.06) 4px
+    );
     z-index: 5;
     pointer-events: none;
+    animation: scanline-intensity 0.08s ease-in-out infinite alternate;
 }
 
-/* Variant: Success Glitch (Cyan/Clean) */
+/* Success Glitch — cyan burst + scale pop */
 .glitch-success {
-    animation: success-impact 0.4s cubic-bezier(0.19, 1, 0.22, 1) both;
+    animation: success-impact 0.5s cubic-bezier(0.19, 1, 0.22, 1) both;
 }
 
 @keyframes success-impact {
-    0% { filter: brightness(3) contrast(1.2); transform: scale(1.02); }
-    100% { filter: brightness(1) contrast(1); transform: scale(1); }
+    0%   { filter: brightness(4) saturate(0) contrast(2); transform: scale(1.03); box-shadow: 0 0 40px var(--neon-cyan); }
+    40%  { filter: brightness(1.5) saturate(2); transform: scale(1.01); box-shadow: 0 0 20px rgba(0,242,255,0.3); }
+    100% { filter: brightness(1) saturate(1) contrast(1); transform: scale(1); box-shadow: none; }
 }
 
-/* Horizontal Slicing Effect */
+/* Horizontal Slicing effect */
 @keyframes datamosh-slice {
-    0% { transform: translate(0); clip-path: inset(0 0 0 0); }
-    20% { transform: translate(-15px, 5px); clip-path: inset(10% 0 85% 0); }
-    40% { transform: translate(20px, -5px); clip-path: inset(40% 0 43% 0); }
-    60% { transform: translate(-10px, 8px); clip-path: inset(80% 0 5% 0); }
-    80% { transform: translate(15px, 0); clip-path: inset(20% 0 70% 0); }
-    100% { transform: translate(0); clip-path: inset(0 0 0 0); }
+    0%   { transform: translate(0);         clip-path: inset(0 0 0 0); }
+    20%  { transform: translate(-15px, 5px); clip-path: inset(10% 0 85% 0); filter: hue-rotate(90deg); }
+    40%  { transform: translate(20px, -5px); clip-path: inset(40% 0 43% 0); filter: hue-rotate(-90deg); }
+    60%  { transform: translate(-10px, 8px); clip-path: inset(80% 0 5% 0);  filter: saturate(3); }
+    80%  { transform: translate(15px, 0);    clip-path: inset(20% 0 70% 0); }
+    100% { transform: translate(0);         clip-path: inset(0 0 0 0); filter: none; }
 }
 
-/* Intense Scanline Flicker */
+/* Scanline flicker */
 .scanline-flicker {
     animation: scanline-intensity 0.1s ease-in-out infinite alternate;
 }
-
 @keyframes scanline-intensity {
     from { opacity: 0.1; }
-    to { opacity: 0.8; filter: brightness(3) contrast(2); }
+    to   { opacity: 0.8; filter: brightness(3) contrast(2); }
 }
 
 /* Signal Loss Color Blocks */
@@ -448,21 +475,61 @@ input[type="number"]:focus {
     z-index: 100;
     animation: block-drift 0.1s steps(2) infinite;
 }
-
 @keyframes block-drift {
-    0% { top: 0; left: -10%; }
-    50% { top: 50%; left: 10%; }
-    100% { top: 100%; left: -5%; }
+    0%   { top: 0;    left: -10%; }
+    50%  { top: 50%;  left: 10%;  }
+    100% { top: 100%; left: -5%;  }
 }
 
-/* Feedback Pulse (Enhanced) */
+/* Correct Guess Pulse */
 .correct-pulse {
-    animation: correct-impact 0.3s cubic-bezier(0.19, 1, 0.22, 1) both;
+    animation: correct-impact 0.35s cubic-bezier(0.19, 1, 0.22, 1) both;
+}
+@keyframes correct-impact {
+    0%   { filter: brightness(5); transform: scale(1.05); }
+    100% { filter: brightness(1); transform: scale(1); }
 }
 
-@keyframes correct-impact {
-    0% { filter: brightness(5) white-balance(100%); transform: scale(1.05); }
-    100% { filter: brightness(1); transform: scale(1); }
+/* ── Neon Light Streak ── */
+@keyframes streak-drift {
+    0%   { transform: translateX(-120%) skewX(-15deg); opacity: 0; }
+    10%  { opacity: 0.6; }
+    90%  { opacity: 0.4; }
+    100% { transform: translateX(220%) skewX(-15deg); opacity: 0; }
+}
+.neon-streak {
+    position: fixed;
+    top: 0; left: 0;
+    width: 40%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--neon-cyan), var(--neon-magenta), transparent);
+    box-shadow: 0 0 12px var(--neon-cyan), 0 0 30px rgba(0, 242, 255, 0.4);
+    pointer-events: none;
+    z-index: 999;
+    animation: streak-drift var(--streak-dur, 1.5s) ease-in-out var(--streak-delay, 0s) both;
+}
+
+/* ── Ambient Neon Pulse on wrapper ── */
+@keyframes ambient-pulse {
+    0%, 100% { box-shadow: 0 0 30px rgba(0, 0, 0, 0.5); }
+    50%       { box-shadow: 0 0 50px rgba(0, 0, 0, 0.5), 0 0 2px rgba(0,242,255,0.08), inset 0 0 30px rgba(0,242,255,0.02); }
+}
+.main-wrapper {
+    animation: ambient-pulse 6s ease-in-out infinite;
+}
+
+/* ── Chromatic Aberration H1 glitch (triggered via JS) ── */
+@keyframes chroma-glitch {
+    0%   { text-shadow: -3px 0 var(--neon-cyan),    3px 0 var(--neon-magenta); filter: brightness(1.2); }
+    20%  { text-shadow:  4px 0 var(--neon-magenta), -4px 0 var(--neon-cyan);  filter: brightness(2); }
+    40%  { text-shadow: -2px 0 var(--neon-cyan),    2px 0 var(--neon-magenta); filter: brightness(1); }
+    60%  { text-shadow:  5px 0 var(--neon-magenta), -5px 0 var(--neon-cyan);  filter: brightness(1.5); }
+    80%  { text-shadow: -1px 0 var(--neon-cyan),    1px 0 var(--neon-magenta); filter: brightness(1); }
+    100% { text-shadow: none; -webkit-text-fill-color: transparent; filter: none; }
+}
+.h1-glitch {
+    -webkit-text-fill-color: #fff;
+    animation: chroma-glitch 0.4s steps(5, end) both;
 }
 
 /* Leaderboard List */
