@@ -1013,12 +1013,16 @@ input:focus, #player-name:focus {
 .duel-result-overlay {
     position: fixed;
     inset: 0;
-    z-index: 20;
+    z-index: 50; /* Higher than presence/glitch */
     background: rgba(10, 10, 12, 0.95);
     display: flex;
+    flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
+    padding: 4rem 1rem;
+    overflow-y: auto;
     backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
 }
 
 .duel-result-overlay .main-wrapper {
