@@ -601,6 +601,8 @@ let duel = {
     oppWrong: 0, oppDone: false, oppWon: false,
     oppHistory: [], oppTimeSec: 0, oppPoints: 0,
     oppRoundOver: false,
+    graceTimeLeft: 0,
+    graceInterval: null,
 };
 
 function joinDuelRoom(room) {
@@ -628,6 +630,8 @@ function joinDuelRoom(room) {
         roundResults: [],
         roundOver: false,
         oppRoundOver: false,
+        graceTimeLeft: 0,
+        graceInterval: null,
     };
 
     // Setup UI
@@ -706,6 +710,11 @@ function submitDuelGuess() {
         duel.roundWon = true; 
         duel.timeSec = stopTimer(duel.timer);
         duel.points = calcPoints(duel.timeSec, duel.wrong, duel.difficulty);
+        
+        if (duel.graceInterval) {
+            clearInterval(duel.graceInterval);
+            duel.graceInterval = null;
+        }
 
         document.getElementById('feedback-my').innerHTML = `✓ SELESAI! ${duel.points} DP`;
         document.getElementById('duel-my').classList.add('finished');
@@ -824,14 +833,41 @@ function handleOpponentBroadcast(data) {
         document.getElementById('duel-opp').classList.add('finished');
         document.getElementById('opp-status').innerHTML = `<span>SELESAI — ${data.points} DP</span>`;
         
-        // Instant speed finish: if opponent won and I haven't finished, I lose this round
-        if (data.won && !duel.roundOver) {
-            stopTimer(duel.timer);
-            duel.roundOver = true;
-            duel.roundWon = false;
-            duel.points = 0;
-            document.getElementById('duel-my').classList.add('finished');
-            document.getElementById('feedback-my').innerHTML = `✗ KALAH CEPAT!`;
+        // Grace Period: iff opponent won (finished) and I haven't finished
+        if (data.won && !duel.roundOver && !duel.graceInterval) {
+            duel.graceTimeLeft = 30;
+            document.getElementById('feedback-my').innerHTML = `<span style="color:var(--neon-magenta); font-weight:bold;">LAWAN SELESAI! SISA WAKTU: ${duel.graceTimeLeft}s</span>`;
+            triggerGlobalGlitch(300, 'error');
+
+            duel.graceInterval = setInterval(() => {
+                duel.graceTimeLeft--;
+                if (duel.graceTimeLeft <= 0) {
+                    clearInterval(duel.graceInterval);
+                    duel.graceInterval = null;
+                    if (!duel.roundOver) {
+                        // Force Loss
+                        const elapsed = stopTimer(duel.timer);
+                        duel.timeSec = elapsed;
+                        duel.roundOver = true;
+                        duel.roundWon = false;
+                        duel.points = 0;
+                        document.getElementById('duel-my').classList.add('finished');
+                        document.getElementById('feedback-my').innerHTML = `<span style="color:var(--accent-red);">WAKTU HABIS! RONDE GAGAL</span>`;
+                        
+                        broadcastGuessResult({
+                            round_finished: true,
+                            won: false,
+                            timeSec: elapsed,
+                            points: 0,
+                            wrong: duel.wrong,
+                            totalGuesses: duel.history.length
+                        });
+                        if (duel.oppRoundOver) finishRound();
+                    }
+                } else {
+                    document.getElementById('feedback-my').innerHTML = `<span style="color:var(--neon-magenta); font-weight:bold;">LAWAN SELESAI! SISA WAKTU: ${duel.graceTimeLeft}s</span>`;
+                }
+            }, 1000);
         }
 
         if (duel.roundOver) finishRound();
@@ -931,6 +967,12 @@ function prepareNextRound() {
 
 function startNextRound() {
     duel.currentRound++;
+    
+    if (duel.graceInterval) {
+        clearInterval(duel.graceInterval);
+        duel.graceInterval = null;
+    }
+
     duel.roundOver = false;
     duel.oppRoundOver = false;
     duel.roundWon = false;
@@ -996,6 +1038,7 @@ function startNextRound() {
 function showDuelResult(isForfeit = false) {
     stopTimer(duel.timer);
     if (duel.oppTimerInterval) clearInterval(duel.oppTimerInterval);
+    if (duel.graceInterval) clearInterval(duel.graceInterval);
 
     // Clean up channel
     if (duel.channel) { supabaseClient.removeChannel(duel.channel); duel.channel = null; }
@@ -1094,6 +1137,7 @@ function exitDuel() {
 
     stopTimer(duel.timer);
     if (duel.oppTimerInterval) clearInterval(duel.oppTimerInterval);
+    if (duel.graceInterval) clearInterval(duel.graceInterval);
     if (duel.channel) { supabaseClient.removeChannel(duel.channel); duel.channel = null; }
     cleanupMatchmaking();
     document.getElementById('duel-arena').style.display = 'none';
