@@ -13,6 +13,30 @@ let gameState = {
     wrongGuesses: 0,
 };
 
+const MODE_STORAGE_KEY = 'guess_it_mode';
+
+function persistMode(mode) {
+    try { sessionStorage.setItem(MODE_STORAGE_KEY, mode); } catch (_) {}
+}
+
+function readPersistedMode() {
+    try { return sessionStorage.getItem(MODE_STORAGE_KEY); } catch (_) { return null; }
+}
+
+function applyModeToDifficultyUI(mode) {
+    const subtitle = document.getElementById('diff-subtitle');
+    if (!subtitle) return;
+    subtitle.innerHTML = mode === 'duel' ? '&gt; PILIH_LEVEL_DUEL' : '&gt; PILIH_LEVEL';
+}
+
+function setMode(mode, { persist = true } = {}) {
+    let nextMode = mode === 'duel' ? 'duel' : 'solo';
+    if (nextMode === 'duel' && !gameState.currentUser) nextMode = 'solo';
+    gameState.mode = nextMode;
+    if (persist) persistMode(nextMode);
+    applyModeToDifficultyUI(nextMode);
+}
+
 // ============================================================
 // CUSTOM AUTH
 // ============================================================
@@ -251,6 +275,11 @@ function showPage(pageId, isPopState = false) {
         const el = document.getElementById(id);
         if (el) { if (id === pageId) el.classList.add('active'); else el.classList.remove('active'); }
     });
+    if (pageId === 'page-difficulty') {
+        const savedMode = readPersistedMode();
+        if (savedMode === 'duel' || savedMode === 'solo') setMode(savedMode, { persist: false });
+        else applyModeToDifficultyUI(gameState.mode);
+    }
     if (!isPopState) history.pushState({ pageId }, '', '#' + pageId);
     if (pageId === 'page-menu' || pageId === 'page-result') backBtn.classList.remove('visible');
     else backBtn.classList.add('visible');
@@ -283,9 +312,8 @@ function cleanupActiveGame() {
 // MODE SELECTION
 // ============================================================
 function selectMode(mode) {
-    gameState.mode = mode;
     if (mode === 'solo') {
-        document.getElementById('diff-subtitle').innerHTML = '&gt; PILIH_LEVEL';
+        setMode('solo');
         showPage('page-difficulty');
     } else {
         // Duel requires login
@@ -294,7 +322,7 @@ function selectMode(mode) {
             triggerFlash('flash-red');
             return;
         }
-        document.getElementById('diff-subtitle').innerHTML = '&gt; PILIH_LEVEL_DUEL';
+        setMode('duel');
         showPage('page-difficulty');
     }
 }
