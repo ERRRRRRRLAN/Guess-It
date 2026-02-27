@@ -1143,12 +1143,111 @@ function showDuelResult(isForfeit = false) {
     triggerGlobalGlitch(400, matchWinner === gameState.currentUser ? 'success' : 'error');
 }
 
-function exitDuel() {
+// ============================================================
+// CUSTOM CONFIRM MODAL (replaces native confirm/alert)
+// ============================================================
+let confirmModal = null;
+
+function ensureConfirmModal() {
+    if (confirmModal) return confirmModal;
+
+    const overlay = document.getElementById('modal-confirm');
+    const titleEl = document.getElementById('modal-confirm-title');
+    const messageEl = document.getElementById('modal-confirm-message');
+    const okBtn = document.getElementById('modal-confirm-ok');
+    const cancelBtn = document.getElementById('modal-confirm-cancel');
+
+    if (!overlay || !titleEl || !messageEl || !okBtn || !cancelBtn) return null;
+
+    const state = {
+        overlay,
+        titleEl,
+        messageEl,
+        okBtn,
+        cancelBtn,
+        resolve: null,
+        prevFocus: null,
+        keyHandler: null
+    };
+
+    function close(result) {
+        if (!state.resolve) return;
+        const resolve = state.resolve;
+        state.resolve = null;
+
+        state.overlay.style.display = 'none';
+        state.overlay.setAttribute('aria-hidden', 'true');
+
+        if (state.keyHandler) document.removeEventListener('keydown', state.keyHandler, true);
+        state.keyHandler = null;
+
+        const prev = state.prevFocus;
+        state.prevFocus = null;
+        if (prev && typeof prev.focus === 'function') prev.focus();
+
+        resolve(result);
+    }
+
+    okBtn.addEventListener('click', () => close(true));
+    cancelBtn.addEventListener('click', () => close(false));
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) close(false);
+    });
+
+    state.open = function open({ title = 'KONFIRMASI', message = '', okText = 'OK', cancelText = 'BATAL' } = {}) {
+        if (state.resolve) close(false);
+
+        titleEl.textContent = title;
+        messageEl.textContent = message;
+        okBtn.textContent = okText;
+        cancelBtn.textContent = cancelText;
+
+        state.prevFocus = document.activeElement;
+        overlay.style.display = 'flex';
+        overlay.setAttribute('aria-hidden', 'false');
+
+        state.keyHandler = (ev) => {
+            if (ev.key === 'Escape') {
+                ev.preventDefault();
+                close(false);
+                return;
+            }
+            if (ev.key === 'Enter') {
+                ev.preventDefault();
+                close(document.activeElement === cancelBtn ? false : true);
+            }
+        };
+        document.addEventListener('keydown', state.keyHandler, true);
+
+        setTimeout(() => okBtn.focus(), 0);
+
+        return new Promise((resolve) => {
+            state.resolve = resolve;
+        });
+    };
+
+    confirmModal = state;
+    return confirmModal;
+}
+
+function showConfirm(message, options = {}) {
+    const modal = ensureConfirmModal();
+    if (!modal) {
+        console.warn('[MODAL] Confirm modal missing; blocking action by default');
+        return Promise.resolve(false);
+    }
+    return modal.open({ ...options, message });
+}
+
+async function exitDuel() {
     // Check if duel game is actively in progress (not finished)
     const isGameActive = duel.channel && !document.getElementById('duel-result-overlay').style.display.includes('flex');
 
     if (isGameActive) {
-        const confirmed = confirm('Jika kamu keluar, kamu akan KALAH dan tidak mendapatkan poin. Yakin ingin keluar?');
+        const confirmed = await showConfirm(
+            'Jika kamu keluar, kamu akan KALAH dan tidak mendapatkan poin.\nYakin ingin keluar?',
+            { title: 'KELUAR DUEL', okText: 'KELUAR', cancelText: 'BATAL' }
+        );
         if (!confirmed) return;
 
         // Broadcast forfeit to opponent

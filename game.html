@@ -251,6 +251,18 @@
         </div>
     </div>
 
+    <!-- Custom Confirm Modal (replaces native confirm/alert) -->
+    <div class="modal-overlay" id="modal-confirm" style="display:none;" aria-hidden="true">
+        <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="modal-confirm-title" aria-describedby="modal-confirm-message">
+            <div class="modal-title" id="modal-confirm-title">KONFIRMASI</div>
+            <div class="modal-message" id="modal-confirm-message"></div>
+            <div class="modal-actions">
+                <button class="btn btn-primary modal-ok" id="modal-confirm-ok" type="button">OK</button>
+                <button class="btn modal-cancel" id="modal-confirm-cancel" type="button">BATAL</button>
+            </div>
+        </div>
+    </div>
+
     <script src="game.js"></script>
 </body>
 </html>

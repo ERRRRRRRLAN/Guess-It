@@ -1313,3 +1313,80 @@ input:focus, #player-name:focus {
     box-shadow: 0 0 14px rgba(0, 255, 255, 0.3);
     transform: translateY(-50%) scale(1.1);
 }
+
+/* ============================================
+   CUSTOM MODALS
+   ============================================ */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    background: rgba(5, 5, 8, 0.78);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+.modal-panel {
+    width: 100%;
+    max-width: 520px;
+    background: var(--bg-panel);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 40px 100px rgba(0, 0, 0, 0.6);
+    padding: 1.5rem 1.5rem 1.25rem 1.5rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.modal-panel::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--neon-cyan), var(--neon-magenta), transparent);
+}
+
+.modal-title {
+    font-family: var(--font-data);
+    font-size: 0.85rem;
+    letter-spacing: 3px;
+    color: #fff;
+    text-transform: uppercase;
+    margin-bottom: 0.75rem;
+}
+
+.modal-message {
+    font-family: var(--font-main);
+    color: var(--text-dim);
+    line-height: 1.55;
+    margin-bottom: 1.25rem;
+    white-space: pre-wrap;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+}
+
+.modal-actions .btn {
+    padding: 0.9rem 1.1rem;
+    min-width: 120px;
+}
+
+.modal-cancel {
+    border-color: var(--neon-magenta);
+    color: var(--neon-magenta);
+}
+
+.modal-cancel:hover {
+    background: var(--neon-magenta);
+    color: #000;
+    box-shadow: 0 0 20px rgba(255, 0, 255, 0.35);
+}
