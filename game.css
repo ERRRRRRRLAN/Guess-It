@@ -806,10 +806,10 @@ input:focus, #player-name:focus {
     background: rgba(255, 0, 255, 0.1);
     padding: 0.25rem 1rem;
     border: 1px solid var(--neon-magenta);
-    position: absolute;
-    left: 50%;
-    bottom: -2.25rem;
-    transform: translateX(-50%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
     clip-path: polygon(10% 0, 100% 0, 90% 100%, 0 100%);
     letter-spacing: 2px;
 }
@@ -927,19 +927,35 @@ input:focus, #player-name:focus {
 }
 
 .duel-nav {
-    display: flex;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    grid-template-rows: auto auto;
     align-items: center;
-    justify-content: space-between;
+    column-gap: 1rem;
+    row-gap: 0.35rem;
     position: sticky;
     top: 0;
     left: 0;
     right: 0;
     z-index: 30;
-    padding: 1rem 1rem;
-    margin-bottom: 2.75rem;
+    padding: 0.9rem 1rem 0.75rem 1rem;
+    margin-bottom: 1.25rem;
     background: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
+}
+
+.duel-nav .back-btn {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    justify-self: start;
+}
+
+.duel-nav .duel-opponent-name {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+    justify-self: end;
+    text-align: right;
 }
 
 .duel-vs-label {
@@ -951,6 +967,17 @@ input:focus, #player-name:focus {
     letter-spacing: 4px;
     line-height: 1;
     padding-top: 0.25rem;
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: center;
+}
+
+.duel-nav .duel-round-display {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: center;
+    position: static;
+    transform: none;
 }
 
 .duel-panels {
