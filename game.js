@@ -103,8 +103,29 @@ const userAuth = {
     }
 };
 
+function initAuthEnterHandlers() {
+    const loginUser = document.getElementById('login-user');
+    const loginPass = document.getElementById('login-pass');
+    const regUser = document.getElementById('reg-user');
+    const regPass = document.getElementById('reg-pass');
+
+    const submitOnEnter = (event, submitFn, buttonSelector) => {
+        if (event.key !== 'Enter' || event.repeat) return;
+        event.preventDefault();
+        const btn = document.querySelector(buttonSelector);
+        if (btn?.disabled) return;
+        submitFn();
+    };
+
+    loginUser?.addEventListener('keydown', (e) => submitOnEnter(e, userAuth.login, '#page-login .btn-primary'));
+    loginPass?.addEventListener('keydown', (e) => submitOnEnter(e, userAuth.login, '#page-login .btn-primary'));
+    regUser?.addEventListener('keydown', (e) => submitOnEnter(e, userAuth.register, '#page-register .btn-primary'));
+    regPass?.addEventListener('keydown', (e) => submitOnEnter(e, userAuth.register, '#page-register .btn-primary'));
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     userAuth.checkSession();
+    initAuthEnterHandlers();
     initPresence();
     initBGM();
 
