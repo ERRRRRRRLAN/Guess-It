@@ -808,7 +808,7 @@ input:focus, #player-name:focus {
     border: 1px solid var(--neon-magenta);
     position: absolute;
     left: 50%;
-    bottom: -1.5rem;
+    bottom: -2.25rem;
     transform: translateX(-50%);
     clip-path: polygon(10% 0, 100% 0, 90% 100%, 0 100%);
     letter-spacing: 2px;
@@ -930,8 +930,16 @@ input:focus, #player-name:focus {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0.5rem 1rem;
-    margin-bottom: 1rem;
+    position: sticky;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 30;
+    padding: 1rem 1rem;
+    margin-bottom: 2.75rem;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
 }
 
 .duel-vs-label {
@@ -941,6 +949,8 @@ input:focus, #player-name:focus {
     color: var(--neon-magenta);
     text-shadow: 0 0 20px rgba(255, 0, 255, 0.5), 0 0 40px rgba(255, 0, 255, 0.2);
     letter-spacing: 4px;
+    line-height: 1;
+    padding-top: 0.25rem;
 }
 
 .duel-panels {
