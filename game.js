@@ -724,55 +724,30 @@ function submitDuelGuess() {
 
         if (duel.oppRoundOver) finishRound();
     } else {
-        duel.lives--;
         duel.wrong++;
-        updateHeartsUI('hearts-my', duel.lives);
         triggerFlash('flash-red');
+        playSFX('wrong');
 
-        if (duel.lives <= 0) {
-            // ROUND LOSS (Out of lives)
-            duel.roundOver = true;
-            duel.roundWon = false;
-            duel.timeSec = stopTimer(duel.timer);
-            duel.points = 0;
-
-            document.getElementById('feedback-my').innerHTML = `✗ GAGAL! Angka: ${duel.myTarget}`;
-            document.getElementById('duel-my').classList.add('finished');
-            playSFX('lose');
-
-            broadcastGuessResult({ 
-                round_finished: true, 
-                won: false, 
-                timeSec: duel.timeSec, 
-                points: 0, 
-                wrong: duel.wrong, 
-                totalGuesses: duel.history.length 
-            });
-
-            if (duel.oppRoundOver) finishRound();
+        let feedbackText;
+        if (guess < duel.myTarget) {
+            duel.min = Math.max(duel.min, guess + 1);
+            feedbackText = `&gt; RENDAH: ${duel.min}-${duel.max}`;
         } else {
-            let feedbackText;
-            if (guess < duel.myTarget) {
-                duel.min = Math.max(duel.min, guess + 1);
-                feedbackText = `&gt; RENDAH: ${duel.min}-${duel.max}`;
-            } else {
-                duel.max = Math.min(duel.max, guess - 1);
-                feedbackText = `&gt; TINGGI: ${duel.min}-${duel.max}`;
-            }
-            document.getElementById('feedback-my').innerHTML = feedbackText;
-            document.getElementById('low-my').innerText = duel.min;
-            document.getElementById('high-my').innerText = duel.max;
-            playSFX('wrong');
-            input.value = ''; input.focus();
-
-            // Broadcast range/lives update (still playing)
-            broadcastGuessResult({
-                won: false, still_playing: true,
-                lives: duel.lives, min: duel.min, max: duel.max,
-                wrong: duel.wrong, totalGuesses: duel.history.length,
-                lastGuess: guess
-            });
+            duel.max = Math.min(duel.max, guess - 1);
+            feedbackText = `&gt; TINGGI: ${duel.min}-${duel.max}`;
         }
+        document.getElementById('feedback-my').innerHTML = feedbackText;
+        document.getElementById('low-my').innerText = duel.min;
+        document.getElementById('high-my').innerText = duel.max;
+        input.value = ''; input.focus();
+
+        // Broadcast range update (still playing)
+        broadcastGuessResult({
+            won: false, still_playing: true,
+            min: duel.min, max: duel.max,
+            wrong: duel.wrong, totalGuesses: duel.history.length,
+            lastGuess: guess
+        });
     }
 }
 
@@ -821,16 +796,23 @@ function handleOpponentBroadcast(data) {
         document.getElementById('feedback-opp').innerHTML = `✓ SELESAI! ${data.points} DP`;
         document.getElementById('duel-opp').classList.add('finished');
         document.getElementById('opp-status').innerHTML = `<span>SELESAI — ${data.points} DP</span>`;
+        
+        // Instant speed finish: if opponent won and I haven't finished, I lose this round
+        if (data.won && !duel.roundOver) {
+            stopTimer(duel.timer);
+            duel.roundOver = true;
+            duel.roundWon = false;
+            duel.points = 0;
+            document.getElementById('duel-my').classList.add('finished');
+            document.getElementById('feedback-my').innerHTML = `✗ KALAH CEPAT!`;
+        }
+
         if (duel.roundOver) finishRound();
     } else if (data.still_playing) {
         // Opponent made a guess but still playing
-        duel.oppLives = data.lives;
         duel.oppMin = data.min;
         duel.oppMax = data.max;
         duel.oppWrong = data.wrong;
-
-        // Update opponent hearts
-        updateHeartsUI('hearts-opp', data.lives);
 
         // Update opponent range
         document.getElementById('low-opp').innerText = data.min;
@@ -941,8 +923,9 @@ function startNextRound() {
     document.getElementById('duel-my').classList.remove('finished');
     document.getElementById('duel-opp').classList.remove('finished');
     
-    renderHearts('hearts-my', config.lives);
-    renderHearts('hearts-opp', config.lives);
+    // Hide lives for Duel
+    document.getElementById('hearts-my').style.display = 'none';
+    document.getElementById('hearts-opp').style.display = 'none';
     
     document.getElementById('low-my').innerText = 1;
     document.getElementById('high-my').innerText = config.max;
@@ -1113,12 +1096,11 @@ async function saveScore(difficulty, attempts, name, mode, points, timeSec) {
         totalPoints = existingTotal + p;
         console.log(`[SAVE] existing total=${existingTotal}, new total=${totalPoints}`);
 
-        // Delete ALL old rows for this user+mode
+        // Delete ALL old rows for this user+mode in one batch
         const ids = rows.map(r => r.id);
-        for (const id of ids) {
-            await supabaseClient.from('scores').delete().eq('id', id);
-        }
-        console.log(`[SAVE] deleted ${ids.length} old rows`);
+        const { error: delErr } = await supabaseClient.from('scores').delete().in('id', ids);
+        if (delErr) console.error('[SAVE] delete error:', delErr);
+        else console.log(`[SAVE] deleted ${ids.length} old rows`);
     }
 
     // 2. Insert fresh row with accumulated total
