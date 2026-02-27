@@ -211,8 +211,8 @@ function initPresence() {
 // ============================================================
 const difficulties = {
     easy:   { max: 10,  lives: 5,  multiplier: 0.5 },
-    medium: { max: 50,  lives: 5,  multiplier: 1.0 },
-    hard:   { max: 100, lives: 5,  multiplier: 1.5 }
+    medium: { max: 50,  lives: 7,  multiplier: 1.0 },
+    hard:   { max: 100, lives: 10, multiplier: 1.5 }
 };
 
 // ============================================================
@@ -724,10 +724,36 @@ function submitDuelGuess() {
 
         if (duel.oppRoundOver) finishRound();
     } else {
+        duel.lives--;
         duel.wrong++;
+        updateHeartsUI('hearts-my', duel.lives);
         triggerFlash('flash-red');
-        playSFX('wrong');
+        
+        if (duel.lives <= 0) {
+            // ROUND LOSS (Out of lives)
+            const elapsed = stopTimer(duel.timer);
+            duel.timeSec = elapsed;
+            duel.roundOver = true;
+            duel.roundWon = false;
+            duel.points = 0;
+            
+            document.getElementById('feedback-my').innerHTML = `✗ GAGAL! NYAWA HABIS`;
+            document.getElementById('duel-my').classList.add('finished');
+            playSFX('lose');
 
+            broadcastGuessResult({
+                round_finished: true,
+                won: false,
+                timeSec: elapsed,
+                points: 0,
+                wrong: duel.wrong,
+                totalGuesses: duel.history.length
+            });
+            if (duel.oppRoundOver) finishRound();
+            return;
+        }
+
+        playSFX('wrong');
         let feedbackText;
         if (guess < duel.myTarget) {
             duel.min = Math.max(duel.min, guess + 1);
@@ -741,9 +767,10 @@ function submitDuelGuess() {
         document.getElementById('high-my').innerText = duel.max;
         input.value = ''; input.focus();
 
-        // Broadcast range update (still playing)
+        // Broadcast range/lives update (still playing)
         broadcastGuessResult({
             won: false, still_playing: true,
+            lives: duel.lives,
             min: duel.min, max: duel.max,
             wrong: duel.wrong, totalGuesses: duel.history.length,
             lastGuess: guess
@@ -813,6 +840,10 @@ function handleOpponentBroadcast(data) {
         duel.oppMin = data.min;
         duel.oppMax = data.max;
         duel.oppWrong = data.wrong;
+        if (data.lives !== undefined) {
+            duel.oppLives = data.lives;
+            updateHeartsUI('hearts-opp', data.lives);
+        }
 
         // Update opponent range
         document.getElementById('low-opp').innerText = data.min;
@@ -923,9 +954,11 @@ function startNextRound() {
     document.getElementById('duel-my').classList.remove('finished');
     document.getElementById('duel-opp').classList.remove('finished');
     
-    // Hide lives for Duel
-    document.getElementById('hearts-my').style.display = 'none';
-    document.getElementById('hearts-opp').style.display = 'none';
+    // Show lives for Duel
+    document.getElementById('hearts-my').style.display = 'flex';
+    document.getElementById('hearts-opp').style.display = 'flex';
+    renderHearts('hearts-my', config.lives);
+    renderHearts('hearts-opp', config.lives);
     
     document.getElementById('low-my').innerText = 1;
     document.getElementById('high-my').innerText = config.max;
