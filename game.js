@@ -37,6 +37,88 @@ function setMode(mode, { persist = true } = {}) {
     applyModeToDifficultyUI(nextMode);
 }
 
+const MATCHMAKING_STORAGE_KEY = 'guess_it_matchmaking_state';
+const DUEL_STORAGE_KEY = 'guess_it_duel_state';
+
+function safeJsonParse(text) {
+    try { return JSON.parse(text); } catch (_) { return null; }
+}
+
+function persistMatchmakingState(state) {
+    try { sessionStorage.setItem(MATCHMAKING_STORAGE_KEY, JSON.stringify(state)); } catch (_) {}
+}
+
+function readMatchmakingState() {
+    try { return safeJsonParse(sessionStorage.getItem(MATCHMAKING_STORAGE_KEY)); } catch (_) { return null; }
+}
+
+function clearMatchmakingState() {
+    try { sessionStorage.removeItem(MATCHMAKING_STORAGE_KEY); } catch (_) {}
+}
+
+function persistDuelState() {
+    if (!duel?.room?.id || !gameState.currentUser) return;
+
+    const myElapsedSec = duel.timer?.startTime ? (Date.now() - duel.timer.startTime) / 1000 : 0;
+    const oppElapsedSec = duel.oppTimerStart ? (Date.now() - duel.oppTimerStart) / 1000 : 0;
+
+    const snapshot = {
+        v: 1,
+        savedAt: Date.now(),
+        roomId: duel.room.id,
+        difficulty: duel.difficulty,
+        myRole: duel.myRole,
+        myTarget: duel.myTarget,
+        oppName: duel.oppName,
+
+        lives: duel.lives,
+        maxLives: duel.maxLives,
+        min: duel.min,
+        max: duel.max,
+        history: Array.isArray(duel.history) ? duel.history : [],
+        wrong: duel.wrong,
+        done: duel.done,
+        won: duel.won,
+        timeSec: duel.timeSec || 0,
+        points: duel.points || 0,
+
+        currentRound: duel.currentRound,
+        myRoundWins: duel.myRoundWins,
+        oppRoundWins: duel.oppRoundWins,
+        roundResults: Array.isArray(duel.roundResults) ? duel.roundResults : [],
+        roundOver: duel.roundOver,
+        roundWon: duel.roundWon,
+        oppRoundOver: duel.oppRoundOver,
+        oppRoundWon: duel.oppRoundWon,
+
+        graceTimeLeft: duel.graceTimeLeft,
+
+        oppLives: duel.oppLives,
+        oppMaxLives: duel.oppMaxLives,
+        oppMin: duel.oppMin,
+        oppMax: duel.oppMax,
+        oppWrong: duel.oppWrong,
+        oppDone: duel.oppDone,
+        oppWon: duel.oppWon,
+        oppHistory: Array.isArray(duel.oppHistory) ? duel.oppHistory : [],
+        oppTimeSec: duel.oppTimeSec || 0,
+        oppPoints: duel.oppPoints || 0,
+
+        myElapsedSec,
+        oppElapsedSec
+    };
+
+    try { sessionStorage.setItem(DUEL_STORAGE_KEY, JSON.stringify(snapshot)); } catch (_) {}
+}
+
+function readDuelState() {
+    try { return safeJsonParse(sessionStorage.getItem(DUEL_STORAGE_KEY)); } catch (_) { return null; }
+}
+
+function clearDuelState() {
+    try { sessionStorage.removeItem(DUEL_STORAGE_KEY); } catch (_) {}
+}
+
 // ============================================================
 // CUSTOM AUTH
 // ============================================================
@@ -147,18 +229,71 @@ function initAuthEnterHandlers() {
     regPass?.addEventListener('keydown', (e) => submitOnEnter(e, userAuth.register, '#page-register .btn-primary'));
 }
 
+async function cancelStaleMatchmakingAndReturnToDuelDifficulty() {
+    clearMatchmakingState();
+    cleanupMatchmaking();
+
+    if (!gameState.currentUser) {
+        setMode('solo');
+        showPage('page-menu');
+        return;
+    }
+
+    if (supabaseClient) {
+        await supabaseClient
+            .from('matchmaking_queue')
+            .delete()
+            .eq('username', gameState.currentUser)
+            .eq('status', 'waiting');
+    }
+
+    setMode('duel');
+    showPage('page-difficulty');
+}
+
+async function tryResumeDuelFromStorage() {
+    const saved = readDuelState();
+    if (!saved || !saved.roomId) return false;
+    if (!gameState.currentUser || !supabaseClient) { clearDuelState(); return false; }
+
+    const { data: room, error } = await supabaseClient
+        .from('duel_rooms')
+        .select('*')
+        .eq('id', saved.roomId)
+        .maybeSingle();
+
+    if (error || !room) { clearDuelState(); return false; }
+    if (room.status !== 'active') { clearDuelState(); return false; }
+    if (room.player1 !== gameState.currentUser && room.player2 !== gameState.currentUser) { clearDuelState(); return false; }
+
+    setMode('duel');
+    joinDuelRoom(room, saved);
+    return true;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     userAuth.checkSession();
     initAuthEnterHandlers();
     initPresence();
     initBGM();
 
-    // Handle initial routing from hash
-    const hash = window.location.hash.substring(1);
-    const validPages = ['page-menu', 'page-difficulty', 'page-game', 'page-result', 'page-leaderboard', 'page-login', 'page-register', 'page-matchmaking'];
-    if (hash && validPages.includes(hash)) {
-        showPage(hash, true);
-    }
+    (async () => {
+        // 1) Try resume duel first (covers refresh during active match)
+        const resumed = await tryResumeDuelFromStorage();
+        if (resumed) return;
+
+        // 2) If user refreshes while matchmaking, cancel it and return to duel difficulty
+        const hash = window.location.hash.substring(1);
+        const mm = readMatchmakingState();
+        if (hash === 'page-matchmaking' || (mm && mm.username === gameState.currentUser)) {
+            await cancelStaleMatchmakingAndReturnToDuelDifficulty();
+            return;
+        }
+
+        // 3) Normal hash routing
+        const validPages = ['page-menu', 'page-difficulty', 'page-game', 'page-result', 'page-leaderboard', 'page-login', 'page-register', 'page-matchmaking'];
+        if (hash && validPages.includes(hash)) showPage(hash, true);
+    })();
 });
 
 // ============================================================
@@ -325,6 +460,8 @@ function selectMode(mode) {
         setMode('duel');
         showPage('page-difficulty');
     }
+
+    persistDuelState();
 }
 
 // ============================================================
@@ -333,6 +470,18 @@ function selectMode(mode) {
 function startTimer(displayId) {
     const display = document.getElementById(displayId);
     const start = Date.now();
+    return {
+        startTime: start,
+        interval: setInterval(() => {
+            const elapsed = (Date.now() - start) / 1000;
+            display.innerText = formatTime(elapsed);
+        }, 100)
+    };
+}
+
+function startTimerWithOffset(displayId, elapsedSec = 0) {
+    const display = document.getElementById(displayId);
+    const start = Date.now() - Math.max(0, elapsedSec) * 1000;
     return {
         startTime: start,
         interval: setInterval(() => {
@@ -402,6 +551,15 @@ function renderHearts(containerId, total) {
         const heart = document.createElement('div');
         heart.innerHTML = `<svg class="heart" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>`;
         container.appendChild(heart.firstChild);
+    }
+}
+
+function setHearts(containerId, total, current) {
+    renderHearts(containerId, total);
+    const hearts = document.querySelectorAll(`#${containerId} .heart`);
+    const safeCurrent = Math.max(0, Math.min(total, current));
+    for (let i = safeCurrent; i < total; i++) {
+        if (hearts[i]) hearts[i].classList.add('lost');
     }
 }
 
@@ -504,10 +662,17 @@ let matchmakingPollInterval = null;
 
 async function enterMatchmaking(difficulty) {
     if (!gameState.currentUser) { setFeedback("> LOGIN DULU", true); return; }
+    if (!difficulty || !difficulties[difficulty]) {
+        setMode('duel');
+        setFeedback("> PILIH LEVEL DUEL", true);
+        showPage('page-difficulty');
+        return;
+    }
 
     showPage('page-matchmaking');
     document.getElementById('matchmaking-diff-label').innerText = `LEVEL: ${difficulty.toUpperCase()}`;
     document.getElementById('matchmaking-status').innerHTML = '&gt; MENUNGGU_PLAYER_LAIN...';
+    persistMatchmakingState({ username: gameState.currentUser, difficulty, startedAt: Date.now(), queueId: null });
 
     // 1. Check if there's already someone waiting with the same difficulty
     const { data: waiting } = await supabaseClient
@@ -541,6 +706,7 @@ async function enterMatchmaking(difficulty) {
     }
 
     matchmakingQueueId = inserted.id;
+    persistMatchmakingState({ username: gameState.currentUser, difficulty, startedAt: Date.now(), queueId: matchmakingQueueId });
 
     // 3. Subscribe to duel_rooms for this user
     matchmakingChannel = supabaseClient
@@ -614,17 +780,20 @@ async function createDuelRoom(opponent, difficulty) {
 }
 
 async function cancelMatchmaking() {
-    if (matchmakingQueueId) {
-        await supabaseClient.from('matchmaking_queue').delete().eq('id', matchmakingQueueId);
+    if (gameState.currentUser) {
+        if (matchmakingQueueId) await supabaseClient.from('matchmaking_queue').delete().eq('id', matchmakingQueueId);
+        await supabaseClient.from('matchmaking_queue').delete().eq('username', gameState.currentUser).eq('status', 'waiting');
     }
     cleanupMatchmaking();
-    showPage('page-menu');
+    setMode('duel');
+    showPage('page-difficulty');
 }
 
 function cleanupMatchmaking() {
     matchmakingQueueId = null;
     if (matchmakingChannel) { supabaseClient.removeChannel(matchmakingChannel); matchmakingChannel = null; }
     if (matchmakingPollInterval) { clearInterval(matchmakingPollInterval); matchmakingPollInterval = null; }
+    clearMatchmakingState();
 }
 
 // ============================================================
@@ -652,11 +821,73 @@ let duel = {
     oppRoundOver: false,
     graceTimeLeft: 0,
     graceInterval: null,
+    oppConnection: 'unknown', // 'online' | 'offline' | 'reconnecting' | 'unknown'
+    oppOfflineDeadline: 0,
+    oppOfflineInterval: null,
 };
 
-function joinDuelRoom(room) {
+const DUEL_OFFLINE_GRACE_MS = 15000;
+
+function setOpponentConnectionUI(state, secondsLeft = null) {
+    const statusEl = document.getElementById('opp-status');
+    const timerEl = document.getElementById('timer-opp');
+    if (!statusEl || !timerEl) return;
+
+    if (state === 'offline') {
+        statusEl.innerHTML = `<span style="color:var(--accent-red); font-weight:900;">OFFLINE</span>`;
+        timerEl.innerHTML = secondsLeft != null ? `RECONNECT DALAM: ${secondsLeft}s` : 'RECONNECT...';
+        return;
+    }
+
+    if (state === 'reconnecting') {
+        statusEl.innerHTML = `<span style="color:var(--neon-magenta); font-weight:900;">RECONNECTING...</span>`;
+        timerEl.innerHTML = '';
+        return;
+    }
+
+    // online/unknown -> keep existing match status if already set by gameplay
+    timerEl.innerHTML = '';
+    if (duel.oppRoundOver) return;
+    if (duel.oppDone) return;
+    statusEl.innerHTML = '<span>MENUNGGU TEBAKAN...</span>';
+}
+
+function clearOpponentOfflineCountdown() {
+    if (duel.oppOfflineInterval) clearInterval(duel.oppOfflineInterval);
+    duel.oppOfflineInterval = null;
+    duel.oppOfflineDeadline = 0;
+}
+
+function startOpponentOfflineCountdown() {
+    if (duel.done) return;
+    if (duel.oppOfflineInterval) return;
+
+    duel.oppOfflineDeadline = Date.now() + DUEL_OFFLINE_GRACE_MS;
+    duel.oppConnection = 'offline';
+
+    const tick = () => {
+        const msLeft = duel.oppOfflineDeadline - Date.now();
+        const secLeft = Math.max(0, Math.ceil(msLeft / 1000));
+        setOpponentConnectionUI('offline', secLeft);
+
+        if (msLeft <= 0) {
+            clearOpponentOfflineCountdown();
+            if (!duel.done && duel.oppConnection === 'offline') {
+                // Win by opponent disconnect timeout
+                duel.done = true;
+                showDuelResult(true);
+            }
+        }
+    };
+
+    tick();
+    duel.oppOfflineInterval = setInterval(tick, 250);
+}
+
+function joinDuelRoom(room, restoreSnapshot = null) {
     const config = difficulties[room.difficulty];
     const isP1 = room.player1 === gameState.currentUser;
+    const restore = restoreSnapshot && restoreSnapshot.roomId === room.id ? restoreSnapshot : null;
 
     duel = {
         room: room,
@@ -681,7 +912,49 @@ function joinDuelRoom(room) {
         oppRoundOver: false,
         graceTimeLeft: 0,
         graceInterval: null,
+        oppConnection: 'unknown',
+        oppOfflineDeadline: 0,
+        oppOfflineInterval: null,
     };
+
+    if (restore && restore.difficulty === room.difficulty && restore.oppName === duel.oppName && restore.myRole === duel.myRole) {
+        duel.myTarget = restore.myTarget || duel.myTarget;
+        duel.lives = restore.lives ?? duel.lives;
+        duel.maxLives = restore.maxLives ?? duel.maxLives;
+        duel.min = restore.min ?? duel.min;
+        duel.max = restore.max ?? duel.max;
+        duel.history = Array.isArray(restore.history) ? restore.history : duel.history;
+        duel.wrong = restore.wrong ?? duel.wrong;
+        duel.done = !!restore.done;
+        duel.won = !!restore.won;
+        duel.timeSec = restore.timeSec ?? duel.timeSec;
+        duel.points = restore.points ?? duel.points;
+
+        duel.currentRound = restore.currentRound ?? duel.currentRound;
+        duel.myRoundWins = restore.myRoundWins ?? duel.myRoundWins;
+        duel.oppRoundWins = restore.oppRoundWins ?? duel.oppRoundWins;
+        duel.roundResults = Array.isArray(restore.roundResults) ? restore.roundResults : duel.roundResults;
+        duel.roundOver = !!restore.roundOver;
+        duel.roundWon = !!restore.roundWon;
+        duel.oppRoundOver = !!restore.oppRoundOver;
+        duel.oppRoundWon = !!restore.oppRoundWon;
+        duel.graceTimeLeft = restore.graceTimeLeft ?? duel.graceTimeLeft;
+
+        duel.oppLives = restore.oppLives ?? duel.oppLives;
+        duel.oppMaxLives = restore.oppMaxLives ?? duel.oppMaxLives;
+        duel.oppMin = restore.oppMin ?? duel.oppMin;
+        duel.oppMax = restore.oppMax ?? duel.oppMax;
+        duel.oppWrong = restore.oppWrong ?? duel.oppWrong;
+        duel.oppDone = !!restore.oppDone;
+        duel.oppWon = !!restore.oppWon;
+        duel.oppHistory = Array.isArray(restore.oppHistory) ? restore.oppHistory : duel.oppHistory;
+        duel.oppTimeSec = restore.oppTimeSec ?? duel.oppTimeSec;
+        duel.oppPoints = restore.oppPoints ?? duel.oppPoints;
+        duel._restoreElapsed = {
+            myElapsedSec: restore.myElapsedSec || 0,
+            oppElapsedSec: restore.oppElapsedSec || 0
+        };
+    }
 
     // Setup UI
     document.getElementById('main-wrapper-solo').style.display = 'none';
@@ -695,33 +968,44 @@ function joinDuelRoom(room) {
     document.getElementById('duel-my').classList.remove('finished', 'winner');
     document.getElementById('duel-opp').classList.remove('finished', 'winner');
 
-    renderHearts('hearts-my', config.lives);
-    renderHearts('hearts-opp', config.lives);
+    clearOpponentOfflineCountdown();
+    setHearts('hearts-my', config.lives, duel.lives);
+    setHearts('hearts-opp', config.lives, duel.oppLives);
 
-    document.getElementById('low-my').innerText = 1;
-    document.getElementById('high-my').innerText = config.max;
-    document.getElementById('low-opp').innerText = 1;
-    document.getElementById('high-opp').innerText = config.max;
+    document.getElementById('low-my').innerText = duel.min;
+    document.getElementById('high-my').innerText = duel.max;
+    document.getElementById('low-opp').innerText = duel.oppMin;
+    document.getElementById('high-opp').innerText = duel.oppMax;
 
     document.getElementById('guess-my').value = '';
     document.getElementById('feedback-my').innerText = '';
     document.getElementById('feedback-opp').innerText = '';
     document.getElementById('history-my').innerHTML = '';
     document.getElementById('history-opp').innerHTML = '';
-    document.getElementById('stopwatch-my').innerText = '00:00.0';
-    document.getElementById('stopwatch-opp').innerText = '00:00.0';
-    document.getElementById('opp-status').innerHTML = '<span>MENUNGGU TEBAKAN...</span>';
-    document.getElementById('duel-round-status').innerText = 'ROUND 1';
+    document.getElementById('stopwatch-my').innerText = duel._restoreElapsed ? formatTime(duel._restoreElapsed.myElapsedSec) : '00:00.0';
+    document.getElementById('stopwatch-opp').innerText = duel._restoreElapsed ? formatTime(duel._restoreElapsed.oppElapsedSec) : '00:00.0';
+    if (duel.roundOver) document.getElementById('stopwatch-my').innerText = formatTime(duel.timeSec || 0);
+    if (duel.oppRoundOver) document.getElementById('stopwatch-opp').innerText = formatTime(duel.oppTimeSec || 0);
+    document.getElementById('duel-round-status').innerText = `ROUND ${duel.currentRound || 1}`;
+    setOpponentConnectionUI('online');
     
     // Clear pips
     document.querySelectorAll('.pip').forEach(p => p.className = 'pip');
+    for (let i = 0; i < duel.myRoundWins; i++) document.querySelectorAll('#pips-my .pip')[i]?.classList.add('won');
+    for (let i = 0; i < duel.oppRoundWins; i++) document.querySelectorAll('#pips-opp .pip')[i]?.classList.add('won');
+
+    // Restore history UI if resuming
+    if (Array.isArray(duel.history)) duel.history.forEach(g => updateHistoryUI(g, 'history-my'));
+    if (Array.isArray(duel.oppHistory)) duel.oppHistory.forEach(g => updateHistoryUI(g, 'history-opp'));
 
     // Start my timer
-    duel.timer = startTimer('stopwatch-my');
+    if (!duel.roundOver && !duel.done) {
+        duel.timer = duel._restoreElapsed ? startTimerWithOffset('stopwatch-my', duel._restoreElapsed.myElapsedSec) : startTimer('stopwatch-my');
+    }
     // Start opponent display timer
-    duel.oppTimerStart = Date.now();
+    duel.oppTimerStart = Date.now() - ((duel._restoreElapsed ? duel._restoreElapsed.oppElapsedSec : 0) * 1000);
     duel.oppTimerInterval = setInterval(() => {
-        if (!duel.oppDone) {
+        if (!duel.oppDone && !duel.oppRoundOver) {
             const elapsed = (Date.now() - duel.oppTimerStart) / 1000;
             document.getElementById('stopwatch-opp').innerText = formatTime(elapsed);
         }
@@ -729,13 +1013,41 @@ function joinDuelRoom(room) {
 
     // Subscribe to Realtime broadcast channel for this room
     const channelName = `duel-room-${room.id}`;
-    duel.channel = supabaseClient.channel(channelName)
+    duel.channel = supabaseClient.channel(channelName, {
+        config: { presence: { key: gameState.currentUser } }
+    })
+        .on('presence', { event: 'sync' }, () => {
+            const state = duel.channel.presenceState();
+            const oppOnline = !!(state[duel.oppName] && state[duel.oppName].length);
+            if (!oppOnline) {
+                startOpponentOfflineCountdown();
+            } else {
+                if (duel.oppConnection === 'offline') {
+                    clearOpponentOfflineCountdown();
+                    duel.oppConnection = 'reconnecting';
+                    setOpponentConnectionUI('reconnecting');
+                    setTimeout(() => {
+                        duel.oppConnection = 'online';
+                        setOpponentConnectionUI('online');
+                    }, 800);
+                } else {
+                    duel.oppConnection = 'online';
+                    setOpponentConnectionUI('online');
+                }
+            }
+        })
         .on('broadcast', { event: 'guess' }, (payload) => {
             handleOpponentBroadcast(payload.payload);
         })
-        .subscribe();
+        .subscribe(async (status) => {
+            if (status === 'SUBSCRIBED') {
+                await duel.channel.track({ user: gameState.currentUser, online_at: new Date().toISOString() });
+            }
+        });
 
     console.log(`[DUEL JOINED] Room: ${room.id}, I am ${duel.myRole}, target: ${duel.myTarget}, opponent: ${duel.oppName}`);
+    delete duel._restoreElapsed;
+    persistDuelState();
 }
 
 function submitDuelGuess() {
@@ -752,6 +1064,7 @@ function submitDuelGuess() {
 
     duel.history.push(guess);
     updateHistoryUI(guess, 'history-my');
+    persistDuelState();
 
     if (guess === duel.myTarget) {
         // ROUND WIN (Success)
@@ -783,6 +1096,7 @@ function submitDuelGuess() {
         });
 
         if (duel.oppRoundOver) finishRound();
+        persistDuelState();
     } else {
         duel.lives--;
         duel.wrong++;
@@ -810,6 +1124,7 @@ function submitDuelGuess() {
                 totalGuesses: duel.history.length
             });
             if (duel.oppRoundOver) finishRound();
+            persistDuelState();
             return;
         }
 
@@ -835,6 +1150,7 @@ function submitDuelGuess() {
             wrong: duel.wrong, totalGuesses: duel.history.length,
             lastGuess: guess
         });
+        persistDuelState();
     }
 }
 
@@ -861,6 +1177,7 @@ function handleOpponentBroadcast(data) {
         document.getElementById('opp-status').innerHTML = '<span>MENYERAH</span>';
         playSFX('win');
         showDuelResult(true); // My win by forfeit
+        persistDuelState();
         return;
     }
 
@@ -869,6 +1186,7 @@ function handleOpponentBroadcast(data) {
         duel.myTarget = duel.myRole === 'player1' ? data.target1 : data.target2;
         duel.oppTarget = duel.myRole === 'player1' ? data.target2 : data.target1; // mostly for debugging/completeness
         startNextRound();
+        persistDuelState();
         return;
     }
 
@@ -923,6 +1241,7 @@ function handleOpponentBroadcast(data) {
         }
 
         if (duel.roundOver) finishRound();
+        persistDuelState();
     } else if (data.still_playing) {
         // Opponent made a guess but still playing
         duel.oppMin = data.min;
@@ -982,6 +1301,8 @@ function finishRound() {
         if (pips[duel.oppRoundWins - 1]) pips[duel.oppRoundWins - 1].classList.add('won');
         triggerGlobalGlitch(300, 'error');
     }
+
+    persistDuelState();
 
     // Check match end condition (Best of 3)
     if (duel.myRoundWins >= 2 || duel.oppRoundWins >= 2 || duel.currentRound >= 3) {
@@ -1086,6 +1407,7 @@ function startNextRound() {
 
     triggerGlobalGlitch(400, 'neutral');
     playSFX('pageOpen');
+    persistDuelState();
 }
 
 
@@ -1093,6 +1415,8 @@ function showDuelResult(isForfeit = false) {
     stopTimer(duel.timer);
     if (duel.oppTimerInterval) clearInterval(duel.oppTimerInterval);
     if (duel.graceInterval) clearInterval(duel.graceInterval);
+    clearOpponentOfflineCountdown();
+    clearDuelState();
 
     // Clean up channel
     if (duel.channel) { supabaseClient.removeChannel(duel.channel); duel.channel = null; }
@@ -1310,6 +1634,8 @@ async function exitDuel() {
     if (duel.oppTimerInterval) clearInterval(duel.oppTimerInterval);
     if (duel.graceInterval) clearInterval(duel.graceInterval);
     if (duel.channel) { supabaseClient.removeChannel(duel.channel); duel.channel = null; }
+    clearOpponentOfflineCountdown();
+    clearDuelState();
     cleanupMatchmaking();
     document.getElementById('duel-arena').style.display = 'none';
     document.getElementById('duel-result-overlay').style.display = 'none';
