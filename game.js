@@ -715,6 +715,8 @@ function submitDuelGuess() {
             clearInterval(duel.graceInterval);
             duel.graceInterval = null;
         }
+        
+        document.getElementById('timer-my').innerHTML = ''; // Clear grace timer msg
 
         document.getElementById('feedback-my').innerHTML = `✓ SELESAI! ${duel.points} DP`;
         document.getElementById('duel-my').classList.add('finished');
@@ -836,7 +838,7 @@ function handleOpponentBroadcast(data) {
         // Grace Period: iff opponent won (finished) and I haven't finished
         if (data.won && !duel.roundOver && !duel.graceInterval) {
             duel.graceTimeLeft = 30;
-            document.getElementById('feedback-my').innerHTML = `<span style="color:var(--neon-magenta); font-weight:bold;">LAWAN SELESAI! SISA WAKTU: ${duel.graceTimeLeft}s</span>`;
+            document.getElementById('timer-my').innerHTML = `LAWAN SELESAI! SISA WAKTU: ${duel.graceTimeLeft}s`;
             triggerGlobalGlitch(300, 'error');
 
             duel.graceInterval = setInterval(() => {
@@ -844,6 +846,7 @@ function handleOpponentBroadcast(data) {
                 if (duel.graceTimeLeft <= 0) {
                     clearInterval(duel.graceInterval);
                     duel.graceInterval = null;
+                    document.getElementById('timer-my').innerHTML = ''; 
                     if (!duel.roundOver) {
                         // Force Loss
                         const elapsed = stopTimer(duel.timer);
@@ -865,7 +868,7 @@ function handleOpponentBroadcast(data) {
                         if (duel.oppRoundOver) finishRound();
                     }
                 } else {
-                    document.getElementById('feedback-my').innerHTML = `<span style="color:var(--neon-magenta); font-weight:bold;">LAWAN SELESAI! SISA WAKTU: ${duel.graceTimeLeft}s</span>`;
+                    document.getElementById('timer-my').innerHTML = `LAWAN SELESAI! SISA WAKTU: ${duel.graceTimeLeft}s`;
                 }
             }, 1000);
         }
@@ -995,6 +998,8 @@ function startNextRound() {
     document.getElementById('duel-round-status').innerText = `ROUND ${duel.currentRound}`;
     document.getElementById('duel-my').classList.remove('finished');
     document.getElementById('duel-opp').classList.remove('finished');
+    document.getElementById('timer-my').innerHTML = '';
+    document.getElementById('timer-opp').innerHTML = '';
     
     // Show lives for Duel
     document.getElementById('hearts-my').style.display = 'flex';
@@ -1311,7 +1316,9 @@ function triggerFlash(className) {
 }
 
 function triggerGlobalGlitch(duration = 200, type = 'neutral') {
-    const wrapper = document.querySelector('.main-wrapper');
+    let wrapper = document.querySelector('.main-wrapper.active');
+    if (!wrapper) wrapper = document.getElementById('duel-arena');
+    if (!wrapper || wrapper.style.display === 'none') wrapper = document.querySelector('.main-wrapper'); 
     if (!wrapper) return;
     const scanline = document.querySelector('.scanlines');
     let glitchClass = 'glitch-active';
@@ -1329,6 +1336,7 @@ function triggerGlobalGlitch(duration = 200, type = 'neutral') {
         const streak = document.createElement('div'); streak.className = 'neon-streak';
         streak.style.top = (Math.random() * 95 + 2) + '%';
         streak.style.setProperty('--streak-dur', (0.4 + Math.random() * 0.4) + 's');
+        streak.style.pointerEvents = 'none';
         if (type === 'error') streak.style.background = 'linear-gradient(90deg, transparent, #ff3e00, #ff0000, transparent)';
         if (type === 'success') streak.style.background = 'linear-gradient(90deg, transparent, #00f2ff, #ffffff, transparent)';
         document.body.appendChild(streak); elementsToRemove.push(streak);

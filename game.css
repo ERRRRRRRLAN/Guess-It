@@ -1129,6 +1129,28 @@ input:focus, #player-name:focus {
     letter-spacing: 2px;
 }
 
+/* Grace Period Timer Fixes */
+.duel-timer-msg {
+    height: 1.2rem;
+    text-align: center;
+    font-family: var(--font-data);
+    font-size: 0.7rem;
+    color: var(--neon-magenta);
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+}
+
+/* Ensure glitch effects don't block clicks */
+.glitch-active, .glitch-error, .glitch-success, .glitch-intense {
+    pointer-events: auto !important; /* Allow interaction through the wrapper if glitch is on wrapper */
+}
+
+.neon-streak, .signal-block, .scan-beam, .glow-dot {
+    pointer-events: none !important;
+}
+
+
 /* ============================================
    USER POINTS (SP / DP) BADGES
    ============================================ */
