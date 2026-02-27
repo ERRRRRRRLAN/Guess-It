@@ -1352,20 +1352,12 @@ input:focus, #player-name:focus {
     padding: 1.5rem 1.5rem 1.25rem 1.5rem;
     position: relative;
     overflow: hidden;
-    opacity: 0;
-    transform: translateY(10px) scale(0.98);
-    transition: transform var(--transition-slow), opacity var(--transition-fast);
-}
-
-.modal-overlay.is-open .modal-panel {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: none;
+    transition: none;
 }
 
-.modal-overlay.is-closing .modal-panel {
-    opacity: 0;
-    transform: translateY(8px) scale(0.985);
-}
+/* Panel open/close animation handled by glitch (JS + existing glitch CSS) */
 
 .modal-panel::before {
     content: '';
@@ -1379,19 +1371,18 @@ input:focus, #player-name:focus {
 
 .modal-title {
     font-family: var(--font-data);
-    font-size: 0.85rem;
-    letter-spacing: 3px;
-    color: #fff;
+    font-size: 0.75rem;
+    letter-spacing: 2px;
+    color: var(--neon-cyan);
     text-transform: uppercase;
     margin-bottom: 0.75rem;
 }
 
 .modal-message {
     font-family: var(--font-data);
-    font-size: 0.75rem;
-    letter-spacing: 1px;
-    color: rgba(255, 255, 255, 0.88);
-    line-height: 1.65;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    line-height: 1.55;
     margin-bottom: 1.25rem;
     white-space: pre-wrap;
 }

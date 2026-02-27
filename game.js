@@ -1156,11 +1156,13 @@ function ensureConfirmModal() {
     const messageEl = document.getElementById('modal-confirm-message');
     const okBtn = document.getElementById('modal-confirm-ok');
     const cancelBtn = document.getElementById('modal-confirm-cancel');
+    const panel = overlay ? overlay.querySelector('.modal-panel') : null;
 
-    if (!overlay || !titleEl || !messageEl || !okBtn || !cancelBtn) return null;
+    if (!overlay || !titleEl || !messageEl || !okBtn || !cancelBtn || !panel) return null;
 
     const state = {
         overlay,
+        panel,
         titleEl,
         messageEl,
         okBtn,
@@ -1177,12 +1179,14 @@ function ensureConfirmModal() {
         const resolve = state.resolve;
         state.resolve = null;
 
-        const finish = () => {
-            if (state.transitionHandler) state.overlay.removeEventListener('transitionend', state.transitionHandler, true);
-            state.transitionHandler = null;
-            if (state.closeTimer) clearTimeout(state.closeTimer);
-            state.closeTimer = null;
+        if (state.closeTimer) clearTimeout(state.closeTimer);
 
+        // Glitch close animation (match page transition feel)
+        triggerGlitchOnElement(state.panel, 200, 'neutral');
+        state.overlay.classList.remove('is-open');
+        state.overlay.classList.add('is-closing');
+
+        state.closeTimer = setTimeout(() => {
             state.overlay.classList.remove('is-open', 'is-closing');
             state.overlay.style.display = 'none';
             state.overlay.setAttribute('aria-hidden', 'true');
@@ -1195,16 +1199,7 @@ function ensureConfirmModal() {
             if (prev && typeof prev.focus === 'function') prev.focus();
 
             resolve(result);
-        };
-
-        state.overlay.classList.remove('is-open');
-        state.overlay.classList.add('is-closing');
-
-        state.transitionHandler = (ev) => {
-            if (ev.target === state.overlay && ev.propertyName === 'opacity') finish();
-        };
-        state.overlay.addEventListener('transitionend', state.transitionHandler, true);
-        state.closeTimer = setTimeout(finish, 260);
+        }, 220);
     }
 
     okBtn.addEventListener('click', () => close(true));
@@ -1227,6 +1222,7 @@ function ensureConfirmModal() {
         overlay.classList.remove('is-closing');
         overlay.classList.remove('is-open');
         requestAnimationFrame(() => overlay.classList.add('is-open'));
+        triggerGlitchOnElement(state.panel, 220, 'neutral');
 
         state.keyHandler = (ev) => {
             if (ev.key === 'Escape') {
@@ -1455,6 +1451,65 @@ function triggerFlash(className) {
     const flash = document.getElementById('screen-flash');
     flash.className = 'screen-flash ' + className;
     setTimeout(() => { flash.className = 'screen-flash'; }, 300);
+}
+
+function triggerGlitchOnElement(target, duration = 200, type = 'neutral') {
+    const wrapper = target;
+    if (!wrapper) return;
+
+    const scanline = document.querySelector('.scanlines');
+    let glitchClass = 'glitch-active';
+    let blockGradient = 'repeating-linear-gradient(90deg, var(--neon-cyan), var(--neon-magenta) 50px)';
+    if (type === 'error') { glitchClass = 'glitch-error'; blockGradient = 'repeating-linear-gradient(90deg, #ff0000, #550000 50px)'; }
+    else if (type === 'success') { glitchClass = 'glitch-success'; blockGradient = 'repeating-linear-gradient(90deg, #00f2ff, #ffffff 50px)'; }
+
+    wrapper.classList.add(glitchClass);
+    if (type !== 'neutral') wrapper.classList.add('glitch-intense');
+    if (scanline) { if (type === 'error') scanline.classList.add('scanline-error'); else scanline.classList.add('scanline-flicker'); }
+
+    const jitterClass = type === 'success' ? 'wrapper-light-burst' : 'wrapper-jitter';
+    wrapper.classList.remove(jitterClass); void wrapper.offsetWidth; wrapper.classList.add(jitterClass);
+
+    const elementsToRemove = [];
+    const streakCount = type === 'neutral' ? 1 : 3;
+    for (let i = 0; i < streakCount; i++) {
+        const streak = document.createElement('div'); streak.className = 'neon-streak';
+        streak.style.top = (Math.random() * 95 + 2) + '%';
+        streak.style.setProperty('--streak-dur', (0.4 + Math.random() * 0.4) + 's');
+        streak.style.pointerEvents = 'none';
+        if (type === 'error') streak.style.background = 'linear-gradient(90deg, transparent, #ff3e00, #ff0000, transparent)';
+        if (type === 'success') streak.style.background = 'linear-gradient(90deg, transparent, #00f2ff, #ffffff, transparent)';
+        document.body.appendChild(streak); elementsToRemove.push(streak);
+    }
+
+    const blockCount = type === 'neutral' ? 2 : 6;
+    for (let i = 0; i < blockCount; i++) {
+        const b = document.createElement('div'); b.className = 'signal-block';
+        b.style.setProperty('--block-color', blockGradient);
+        b.style.top = (Math.random() * 90) + '%'; b.style.height = (Math.random() * 15 + 5) + '%';
+        wrapper.appendChild(b); elementsToRemove.push(b);
+    }
+
+    const beam = document.createElement('div'); beam.className = 'scan-beam';
+    beam.style.setProperty('--beam-dur', (duration / 1000).toFixed(2) + 's');
+    if (type === 'error') beam.style.setProperty('--beam-color', '#ff3e00');
+    if (type === 'success') beam.style.setProperty('--beam-color', '#00f2ff');
+    wrapper.appendChild(beam); elementsToRemove.push(beam);
+
+    const dotCount = type === 'neutral' ? 0 : 8;
+    for (let i = 0; i < dotCount; i++) {
+        const dot = document.createElement('div'); dot.className = 'glow-dot';
+        dot.style.left = (Math.random() * 90 + 5) + '%'; dot.style.top = (Math.random() * 90 + 5) + '%';
+        dot.style.setProperty('--dot-color', type === 'error' ? '#ff3e00' : '#00f2ff');
+        dot.style.setProperty('--dot-dur', (0.2 + Math.random() * 0.3) + 's');
+        wrapper.appendChild(dot); elementsToRemove.push(dot);
+    }
+
+    setTimeout(() => {
+        wrapper.classList.remove(glitchClass, 'glitch-intense', jitterClass);
+        if (scanline) scanline.classList.remove('scanline-error', 'scanline-flicker');
+        elementsToRemove.forEach(el => { if (el && el.parentNode) el.parentNode.removeChild(el); });
+    }, duration);
 }
 
 function triggerGlobalGlitch(duration = 200, type = 'neutral') {
