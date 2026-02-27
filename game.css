@@ -797,6 +797,56 @@ input:focus, #player-name:focus {
     text-decoration: underline;
 }
 
+/* Round UI Enhancements */
+.duel-round-display {
+    font-family: var(--font-data);
+    font-size: 1rem;
+    color: var(--neon-magenta);
+    text-shadow: 0 0 10px var(--neon-magenta);
+    background: rgba(255, 0, 255, 0.1);
+    padding: 0.25rem 1rem;
+    border: 1px solid var(--neon-magenta);
+    position: absolute;
+    left: 50%;
+    bottom: -1.5rem;
+    transform: translateX(-50%);
+    clip-path: polygon(10% 0, 100% 0, 90% 100%, 0 100%);
+    letter-spacing: 2px;
+}
+
+.duel-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.victory-pips {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.pip {
+    width: 12px;
+    height: 12px;
+    border: 1px solid var(--text-dim);
+    background: rgba(255, 255, 255, 0.05);
+    transform: rotate(45deg);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pip.won {
+    background: var(--neon-cyan);
+    border-color: var(--neon-cyan);
+    box-shadow: 0 0 10px var(--neon-cyan);
+}
+
+.pip.lost-round {
+    background: var(--accent-red);
+    border-color: var(--accent-red);
+    opacity: 0.5;
+}
+
 .guest-notice {
     margin-top: 1.5rem;
     padding: 1.5rem;

@@ -174,13 +174,20 @@
         <header class="nav-header duel-nav">
             <button class="back-btn visible" onclick="exitDuel()">Keluar</button>
             <div class="duel-vs-label">VS</div>
+            <div class="duel-round-display" id="duel-round-status">ROUND 1</div>
             <div class="duel-opponent-name" id="duel-opponent-name">LAWAN</div>
         </header>
 
         <div class="duel-panels">
             <!-- MY Panel (left) -->
             <div class="duel-panel" id="duel-my">
-                <h2 class="duel-player-label duel-label-me">KAMU</h2>
+                <div class="duel-header-row">
+                    <h2 class="duel-player-label duel-label-me">KAMU</h2>
+                    <div class="victory-pips" id="pips-my">
+                        <div class="pip"></div>
+                        <div class="pip"></div>
+                    </div>
+                </div>
                 <div class="stopwatch" id="stopwatch-my">00:00.0</div>
                 <div class="hearts-container" id="hearts-my"></div>
                 <div class="stat-row">
@@ -203,7 +210,13 @@
 
             <!-- OPPONENT Panel (right, read-only) -->
             <div class="duel-panel duel-panel-opponent" id="duel-opp">
-                <h2 class="duel-player-label" id="opp-label">LAWAN</h2>
+                <div class="duel-header-row">
+                    <h2 class="duel-player-label" id="opp-label">LAWAN</h2>
+                    <div class="victory-pips" id="pips-opp">
+                        <div class="pip"></div>
+                        <div class="pip"></div>
+                    </div>
+                </div>
                 <div class="stopwatch" id="stopwatch-opp">00:00.0</div>
                 <div class="hearts-container" id="hearts-opp"></div>
                 <div class="stat-row">

@@ -590,10 +590,17 @@ let duel = {
     history: [], wrong: 0, done: false,
     timer: null,
     channel: null,
+    // Round Management
+    currentRound: 1,
+    myRoundWins: 0,
+    oppRoundWins: 0,
+    roundResults: [], // { round: 1, winner: 'player1', myPoints: 500, oppPoints: 400 }
+    roundOver: false, // My round status
     // Opponent state (for display)
     oppLives: 0, oppMaxLives: 0, oppMin: 1, oppMax: 100,
     oppWrong: 0, oppDone: false, oppWon: false,
     oppHistory: [], oppTimeSec: 0, oppPoints: 0,
+    oppRoundOver: false,
 };
 
 function joinDuelRoom(room) {
@@ -615,6 +622,12 @@ function joinDuelRoom(room) {
         oppWrong: 0, oppDone: false, oppWon: false,
         oppHistory: [], oppTimeSec: 0, oppPoints: 0,
         difficulty: room.difficulty,
+        currentRound: 1,
+        myRoundWins: 0,
+        oppRoundWins: 0,
+        roundResults: [],
+        roundOver: false,
+        oppRoundOver: false,
     };
 
     // Setup UI
@@ -645,6 +658,10 @@ function joinDuelRoom(room) {
     document.getElementById('stopwatch-my').innerText = '00:00.0';
     document.getElementById('stopwatch-opp').innerText = '00:00.0';
     document.getElementById('opp-status').innerHTML = '<span>MENUNGGU TEBAKAN...</span>';
+    document.getElementById('duel-round-status').innerText = 'ROUND 1';
+    
+    // Clear pips
+    document.querySelectorAll('.pip').forEach(p => p.className = 'pip');
 
     // Start my timer
     duel.timer = startTimer('stopwatch-my');
@@ -669,7 +686,7 @@ function joinDuelRoom(room) {
 }
 
 function submitDuelGuess() {
-    if (duel.done) return;
+    if (duel.done || duel.roundOver) return;
 
     const input = document.getElementById('guess-my');
     const guess = parseInt(input.value);
@@ -684,26 +701,28 @@ function submitDuelGuess() {
     updateHistoryUI(guess, 'history-my');
 
     if (guess === duel.myTarget) {
-        // WIN
-        duel.done = true;
-        duel.won = true;
+        // ROUND WIN (Success)
+        duel.roundOver = true;
+        duel.roundWon = true; 
         duel.timeSec = stopTimer(duel.timer);
         duel.points = calcPoints(duel.timeSec, duel.wrong, duel.difficulty);
 
-        document.getElementById('feedback-my').innerHTML = `✓ BENAR! ${duel.points} DP`;
-        document.getElementById('duel-my').classList.add('finished', 'winner');
+        document.getElementById('feedback-my').innerHTML = `✓ SELESAI! ${duel.points} DP`;
+        document.getElementById('duel-my').classList.add('finished');
         triggerFlash('flash-cyan');
         playSFX('win');
 
         // Broadcast to opponent
-        broadcastGuessResult({ won: true, timeSec: duel.timeSec, points: duel.points, wrong: duel.wrong, totalGuesses: duel.history.length });
+        broadcastGuessResult({ 
+            round_finished: true, 
+            won: true, 
+            timeSec: duel.timeSec, 
+            points: duel.points, 
+            wrong: duel.wrong, 
+            totalGuesses: duel.history.length 
+        });
 
-        // Save score
-        if (gameState.currentUser) {
-            saveScore(duel.difficulty, duel.history.length, gameState.currentUser.toUpperCase(), 'duel', duel.points, Math.round(duel.timeSec));
-        }
-
-        if (duel.oppDone) showDuelResult();
+        if (duel.oppRoundOver) finishRound();
     } else {
         duel.lives--;
         duel.wrong++;
@@ -711,18 +730,26 @@ function submitDuelGuess() {
         triggerFlash('flash-red');
 
         if (duel.lives <= 0) {
-            duel.done = true;
-            duel.won = false;
+            // ROUND LOSS (Out of lives)
+            duel.roundOver = true;
+            duel.roundWon = false;
             duel.timeSec = stopTimer(duel.timer);
             duel.points = 0;
 
-            document.getElementById('feedback-my').innerHTML = `✗ KALAH! Angka: ${duel.myTarget}`;
+            document.getElementById('feedback-my').innerHTML = `✗ GAGAL! Angka: ${duel.myTarget}`;
             document.getElementById('duel-my').classList.add('finished');
             playSFX('lose');
 
-            broadcastGuessResult({ won: false, timeSec: duel.timeSec, points: 0, wrong: duel.wrong, totalGuesses: duel.history.length });
+            broadcastGuessResult({ 
+                round_finished: true, 
+                won: false, 
+                timeSec: duel.timeSec, 
+                points: 0, 
+                wrong: duel.wrong, 
+                totalGuesses: duel.history.length 
+            });
 
-            if (duel.oppDone) showDuelResult();
+            if (duel.oppRoundOver) finishRound();
         } else {
             let feedbackText;
             if (guess < duel.myTarget) {
@@ -738,7 +765,7 @@ function submitDuelGuess() {
             playSFX('wrong');
             input.value = ''; input.focus();
 
-            // Broadcast range/lives update
+            // Broadcast range/lives update (still playing)
             broadcastGuessResult({
                 won: false, still_playing: true,
                 lives: duel.lives, min: duel.min, max: duel.max,
@@ -763,52 +790,38 @@ function handleOpponentBroadcast(data) {
 
     // Handle opponent forfeit
     if (data.forfeit) {
-        duel.oppDone = true;
-        duel.oppWon = false;
+        duel.done = true;
+        duel.roundOver = true;
+        duel.oppRoundOver = true;
         clearInterval(duel.oppTimerInterval);
         document.getElementById('feedback-opp').innerHTML = '✗ MENYERAH';
         document.getElementById('duel-opp').classList.add('finished');
         document.getElementById('opp-status').innerHTML = '<span>MENYERAH</span>';
         playSFX('win');
-
-        // Auto-finish my game as winner
-        if (!duel.done) {
-            duel.done = true;
-            duel.won = true;
-            duel.timeSec = stopTimer(duel.timer);
-            duel.points = calcPoints(duel.timeSec, duel.wrong, duel.difficulty);
-            document.getElementById('duel-my').classList.add('finished', 'winner');
-        }
-        showDuelResult();
+        showDuelResult(true); // My win by forfeit
         return;
     }
 
-    if (data.won === true) {
-        // Opponent won
-        duel.oppDone = true;
-        duel.oppWon = true;
+    // Handle Round Sync (Player 2 receives new targets from Player 1)
+    if (data.next_round_sync) {
+        duel.myTarget = duel.myRole === 'player1' ? data.target1 : data.target2;
+        duel.oppTarget = duel.myRole === 'player1' ? data.target2 : data.target1; // mostly for debugging/completeness
+        startNextRound();
+        return;
+    }
+
+    if (data.round_finished) {
+        duel.oppRoundOver = true;
+        duel.oppRoundWon = data.won;
         duel.oppTimeSec = data.timeSec;
         duel.oppPoints = data.points;
         duel.oppWrong = data.wrong;
         clearInterval(duel.oppTimerInterval);
         document.getElementById('stopwatch-opp').innerText = formatTime(data.timeSec);
-        document.getElementById('feedback-opp').innerHTML = `✓ BENAR! ${data.points} DP`;
-        document.getElementById('duel-opp').classList.add('finished', 'winner');
-        document.getElementById('opp-status').innerHTML = `<span>SELESAI — ${data.points} DP</span>`;
-        if (duel.done) showDuelResult();
-    } else if (data.won === false && !data.still_playing) {
-        // Opponent lost
-        duel.oppDone = true;
-        duel.oppWon = false;
-        duel.oppTimeSec = data.timeSec;
-        duel.oppPoints = 0;
-        duel.oppWrong = data.wrong;
-        clearInterval(duel.oppTimerInterval);
-        document.getElementById('stopwatch-opp').innerText = formatTime(data.timeSec);
-        document.getElementById('feedback-opp').innerHTML = `✗ KALAH`;
+        document.getElementById('feedback-opp').innerHTML = `✓ SELESAI! ${data.points} DP`;
         document.getElementById('duel-opp').classList.add('finished');
-        document.getElementById('opp-status').innerHTML = '<span>KALAH</span>';
-        if (duel.done) showDuelResult();
+        document.getElementById('opp-status').innerHTML = `<span>SELESAI — ${data.points} DP</span>`;
+        if (duel.roundOver) finishRound();
     } else if (data.still_playing) {
         // Opponent made a guess but still playing
         duel.oppLives = data.lives;
@@ -825,7 +838,6 @@ function handleOpponentBroadcast(data) {
 
         // Update opponent history
         if (data.lastGuess) {
-            duel.oppHistory.push(data.lastGuess);
             updateHistoryUI(data.lastGuess, 'history-opp');
         }
 
@@ -836,54 +848,214 @@ function handleOpponentBroadcast(data) {
     }
 }
 
-function showDuelResult() {
+function finishRound() {
+    if (duel.oppTimerInterval) clearInterval(duel.oppTimerInterval);
+    
+    // Determine winner of the round:
+    let winner = null;
+    if (duel.roundWon && duel.oppRoundWon) {
+        winner = duel.timeSec < duel.oppTimeSec ? 'me' : 'opp';
+    } else if (duel.roundWon) {
+        winner = 'me';
+    } else if (duel.oppRoundWon) {
+        winner = 'opp';
+    }
+
+    duel.roundResults.push({
+        round: duel.currentRound,
+        winner: winner,
+        myPoints: duel.points,
+        oppPoints: duel.oppPoints,
+        myTime: duel.timeSec,
+        oppTime: duel.oppTimeSec
+    });
+
+    if (winner === 'me') {
+        duel.myRoundWins++;
+        const pips = document.querySelectorAll('#pips-my .pip');
+        if (pips[duel.myRoundWins - 1]) pips[duel.myRoundWins - 1].classList.add('won');
+        triggerGlobalGlitch(300, 'success');
+    } else if (winner === 'opp') {
+        duel.oppRoundWins++;
+        const pips = document.querySelectorAll('#pips-opp .pip');
+        if (pips[duel.oppRoundWins - 1]) pips[duel.oppRoundWins - 1].classList.add('won');
+        triggerGlobalGlitch(300, 'error');
+    }
+
+    // Check match end condition (Best of 3)
+    if (duel.myRoundWins >= 2 || duel.oppRoundWins >= 2 || duel.currentRound >= 3) {
+        duel.done = true;
+        showDuelResult();
+    } else {
+        prepareNextRound();
+    }
+}
+
+function prepareNextRound() {
+    // Show Round Transition
+    const nextRound = duel.currentRound + 1;
+    document.getElementById('feedback-my').innerHTML = `SIAP UNTUK RONDE ${nextRound}...`;
+    document.getElementById('feedback-opp').innerHTML = `MENUNGGU...`;
+
+    setTimeout(() => {
+        if (duel.myRole === 'player1') {
+            const config = difficulties[duel.difficulty];
+            const target1 = Math.floor(Math.random() * config.max) + 1;
+            let target2 = Math.floor(Math.random() * config.max) + 1;
+            while (target2 === target1 && config.max > 1) target2 = Math.floor(Math.random() * config.max) + 1;
+
+            broadcastGuessResult({
+                next_round_sync: true,
+                target1: target1,
+                target2: target2
+            });
+            
+            duel.myTarget = target1;
+            startNextRound();
+        }
+    }, 2000);
+}
+
+function startNextRound() {
+    duel.currentRound++;
+    duel.roundOver = false;
+    duel.oppRoundOver = false;
+    duel.roundWon = false;
+    duel.oppRoundWon = false;
+    
+    // Reset Round Stats
+    const config = difficulties[duel.difficulty];
+    duel.lives = config.lives;
+    duel.wrong = 0;
+    duel.min = 1;
+    duel.max = config.max;
+    duel.history = [];
+    
+    duel.oppLives = config.lives;
+    duel.oppWrong = 0;
+    duel.oppMin = 1;
+    duel.oppMax = config.max;
+
+    // Reset UI
+    document.getElementById('duel-round-status').innerText = `ROUND ${duel.currentRound}`;
+    document.getElementById('duel-my').classList.remove('finished');
+    document.getElementById('duel-opp').classList.remove('finished');
+    
+    renderHearts('hearts-my', config.lives);
+    renderHearts('hearts-opp', config.lives);
+    
+    document.getElementById('low-my').innerText = 1;
+    document.getElementById('high-my').innerText = config.max;
+    document.getElementById('low-opp').innerText = 1;
+    document.getElementById('high-opp').innerText = config.max;
+
+    document.getElementById('guess-my').value = '';
+    document.getElementById('feedback-my').innerText = '';
+    document.getElementById('feedback-opp').innerText = '';
+    document.getElementById('history-my').innerHTML = '';
+    document.getElementById('history-opp').innerHTML = '';
+    document.getElementById('stopwatch-my').innerText = '00:00.0';
+    document.getElementById('stopwatch-opp').innerText = '00:00.0';
+    document.getElementById('opp-status').innerHTML = '<span>MENUNGGU TEBAKAN...</span>';
+
+    // Restart Timer
     stopTimer(duel.timer);
-    clearInterval(duel.oppTimerInterval);
+    duel.timer = startTimer('stopwatch-my');
+    
+    // Opponent Timer Sync
+    if (duel.oppTimerInterval) clearInterval(duel.oppTimerInterval);
+    duel.oppTimerStart = Date.now();
+    duel.oppTimerInterval = setInterval(() => {
+        if (!duel.oppRoundOver) {
+            const elapsed = (Date.now() - duel.oppTimerStart) / 1000;
+            document.getElementById('stopwatch-opp').innerText = formatTime(elapsed);
+        }
+    }, 100);
+
+    triggerGlobalGlitch(400, 'neutral');
+    playSFX('pageOpen');
+}
+
+
+function showDuelResult(isForfeit = false) {
+    stopTimer(duel.timer);
+    if (duel.oppTimerInterval) clearInterval(duel.oppTimerInterval);
 
     // Clean up channel
     if (duel.channel) { supabaseClient.removeChannel(duel.channel); duel.channel = null; }
 
-    // Update room status
+    // Match Winner Logic
+    const MATCH_WINNER_BONUS = 1000;
+    let matchWinner = null;
+    let myTotalDP = duel.roundResults.reduce((sum, r) => sum + r.myPoints, 0);
+    let oppTotalDP = duel.roundResults.reduce((sum, r) => sum + r.oppPoints, 0);
+
+    if (isForfeit) {
+        matchWinner = gameState.currentUser;
+        myTotalDP += MATCH_WINNER_BONUS;
+    } else if (duel.myRoundWins > duel.oppRoundWins) {
+        matchWinner = gameState.currentUser;
+        myTotalDP += MATCH_WINNER_BONUS;
+    } else if (duel.oppRoundWins > duel.myRoundWins) {
+        matchWinner = duel.oppName;
+        oppTotalDP += MATCH_WINNER_BONUS;
+    }
+
+    // Save final status to Supabase room
     if (duel.room) {
-        const winner = duel.won && !duel.oppWon ? gameState.currentUser
-            : !duel.won && duel.oppWon ? duel.oppName
-            : duel.won && duel.oppWon ? (duel.timeSec < duel.oppTimeSec ? gameState.currentUser : duel.oppName)
-            : null;
-        supabaseClient.from('duel_rooms').update({ status: 'finished', winner: winner }).eq('id', duel.room.id).then(() => {});
+        supabaseClient.from('duel_rooms').update({ 
+            status: 'finished', 
+            winner: matchWinner 
+        }).eq('id', duel.room.id).then(() => {});
+    }
+
+    // Save Score to Leaderboard
+    if (gameState.currentUser) {
+        // We use the last difficulty played
+        saveScore(duel.difficulty, duel.history.length, gameState.currentUser.toUpperCase(), 'duel', myTotalDP, Math.round(duel.timeSec));
     }
 
     const myName = gameState.currentUser.toUpperCase();
     const oppName = duel.oppName.toUpperCase();
-    let winnerLabel;
-    if (duel.won && duel.oppWon) {
-        winnerLabel = duel.timeSec < duel.oppTimeSec ? myName : oppName;
-    } else if (duel.won) {
-        winnerLabel = myName;
-    } else if (duel.oppWon) {
-        winnerLabel = oppName;
-    } else {
-        winnerLabel = 'TIDAK ADA';
-    }
+    
+    // Generate Round Summary HTML
+    let roundsHtml = duel.roundResults.map(r => `
+        <div style="display:grid; grid-template-columns: 1fr 2fr 1fr; gap:0.5rem; font-size:0.7rem; color:var(--text-dim); border-bottom:1px solid rgba(255,255,255,0.05); padding:0.4rem 0;">
+            <div style="text-align:left; ${r.winner === 'me' ? 'color:var(--neon-cyan);' : ''}">${r.myPoints} DP</div>
+            <div style="text-align:center;">RONDE ${r.round}</div>
+            <div style="text-align:right; ${r.winner === 'opp' ? 'color:var(--neon-magenta);' : ''}">${r.oppPoints} DP</div>
+        </div>
+    `).join('');
 
     const content = document.getElementById('duel-result-content');
     content.innerHTML = `
-        <div class="result-status win-color">DUEL SELESAI</div>
-        <h1 style="-webkit-text-fill-color:initial; color:#fff;">PEMENANG: ${winnerLabel}</h1>
-        <div style="display:flex; gap:1rem; margin-top:1.5rem; justify-content:center; flex-wrap:wrap;">
-            <div style="flex:1; min-width:180px; padding:1rem; border:1px solid rgba(255,255,255,0.1); background:rgba(0,242,255,0.03);">
-                <div class="duel-player-label duel-label-me">${myName} (KAMU)</div>
-                <div style="font-size:1.5rem; font-weight:700; color:var(--neon-magenta); font-family:var(--font-data);">${duel.won ? duel.points + ' DP' : 'KALAH'}</div>
-                <div class="win-text-small">${duel.history.length} tebakan · ${formatTime(duel.timeSec)} · ${duel.wrong} salah</div>
+        <div class="result-status ${matchWinner === gameState.currentUser ? 'win-color' : 'lose-color'}">MATCH SELESAI</div>
+        <h1 style="-webkit-text-fill-color:initial; color:#fff; font-size:2rem;">PEMENANG: ${matchWinner ? matchWinner.toUpperCase() : 'DRAW'}</h1>
+        
+        <div style="margin: 1.5rem 0; background:rgba(255,255,255,0.02); padding:1rem; border:1px solid rgba(255,255,255,0.05);">
+            <div style="display:flex; justify-content:space-between; font-family:var(--font-data); font-size:0.6rem; color:var(--neon-cyan); margin-bottom:0.5rem;">
+                <span>SUMMARY</span>
+                <span>BEST OF 3</span>
             </div>
-            <div style="flex:1; min-width:180px; padding:1rem; border:1px solid rgba(255,255,255,0.1); background:rgba(0,242,255,0.03);">
+            ${roundsHtml}
+            ${matchWinner === gameState.currentUser ? `<div style="text-align:center; color:var(--neon-cyan); font-size:0.7rem; margin-top:0.5rem;">+${MATCH_WINNER_BONUS} WINNER BONUS</div>` : ''}
+        </div>
+
+        <div style="display:flex; gap:1rem; justify-content:center; flex-wrap:wrap;">
+            <div style="flex:1; min-width:140px; padding:1rem; border:1px solid rgba(255,255,255,0.1); background:rgba(0,242,255,0.03);">
+                <div class="duel-player-label duel-label-me">${myName}</div>
+                <div style="font-size:1.8rem; font-weight:900; color:var(--neon-cyan); font-family:var(--font-data);">${myTotalDP} DP</div>
+                <div style="font-size:0.6rem; color:var(--text-dim);">${duel.myRoundWins} RONDE MENANG</div>
+            </div>
+            <div style="flex:1; min-width:140px; padding:1rem; border:1px solid rgba(255,255,255,0.1); background:rgba(0,242,255,0.03);">
                 <div class="duel-player-label">${oppName}</div>
-                <div style="font-size:1.5rem; font-weight:700; color:var(--neon-magenta); font-family:var(--font-data);">${duel.oppWon ? duel.oppPoints + ' DP' : 'KALAH'}</div>
-                <div class="win-text-small">${duel.oppHistory.length} tebakan · ${formatTime(duel.oppTimeSec)} · ${duel.oppWrong} salah</div>
+                <div style="font-size:1.8rem; font-weight:900; color:var(--neon-magenta); font-family:var(--font-data);">${oppTotalDP} DP</div>
+                <div style="font-size:0.6rem; color:var(--text-dim);">${duel.oppRoundWins} RONDE MENANG</div>
             </div>
         </div>`;
 
     document.getElementById('duel-result-overlay').style.display = 'flex';
-    triggerGlobalGlitch(400, 'success');
+    triggerGlobalGlitch(400, matchWinner === gameState.currentUser ? 'success' : 'error');
 }
 
 function exitDuel() {
