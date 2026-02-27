@@ -39,6 +39,7 @@ function setMode(mode, { persist = true } = {}) {
 
 const MATCHMAKING_STORAGE_KEY = 'guess_it_matchmaking_state';
 const DUEL_STORAGE_KEY = 'guess_it_duel_state';
+const DUEL_STORAGE_TTL_MS = 1000 * 60 * 60; // 1 hour
 
 function safeJsonParse(text) {
     try { return JSON.parse(text); } catch (_) { return null; }
@@ -56,11 +57,27 @@ function clearMatchmakingState() {
     try { sessionStorage.removeItem(MATCHMAKING_STORAGE_KEY); } catch (_) {}
 }
 
+function duelStorageKeyForUser(username) {
+    return `${DUEL_STORAGE_KEY}:${(username || '').toLowerCase()}`;
+}
+
+function writeDuelStorage(username, snapshot) {
+    try { localStorage.setItem(duelStorageKeyForUser(username), JSON.stringify(snapshot)); } catch (_) {}
+}
+
+function readDuelStorage(username) {
+    try { return safeJsonParse(localStorage.getItem(duelStorageKeyForUser(username))); } catch (_) { return null; }
+}
+
+function removeDuelStorage(username) {
+    try { localStorage.removeItem(duelStorageKeyForUser(username)); } catch (_) {}
+}
+
 function persistDuelState() {
     if (!duel?.room?.id || !gameState.currentUser) return;
 
-    const myElapsedSec = duel.timer?.startTime ? (Date.now() - duel.timer.startTime) / 1000 : 0;
-    const oppElapsedSec = duel.oppTimerStart ? (Date.now() - duel.oppTimerStart) / 1000 : 0;
+    const myTimerStartAt = duel.timer?.startTime || 0;
+    const oppTimerStartAt = duel.oppTimerStart || 0;
 
     const snapshot = {
         v: 1,
@@ -104,19 +121,27 @@ function persistDuelState() {
         oppTimeSec: duel.oppTimeSec || 0,
         oppPoints: duel.oppPoints || 0,
 
-        myElapsedSec,
-        oppElapsedSec
+        myTimerStartAt,
+        oppTimerStartAt
     };
 
-    try { sessionStorage.setItem(DUEL_STORAGE_KEY, JSON.stringify(snapshot)); } catch (_) {}
+    writeDuelStorage(gameState.currentUser, snapshot);
 }
 
 function readDuelState() {
-    try { return safeJsonParse(sessionStorage.getItem(DUEL_STORAGE_KEY)); } catch (_) { return null; }
+    if (!gameState.currentUser) return null;
+    const saved = readDuelStorage(gameState.currentUser);
+    if (!saved) return null;
+    if (!saved.savedAt || (Date.now() - saved.savedAt) > DUEL_STORAGE_TTL_MS) {
+        removeDuelStorage(gameState.currentUser);
+        return null;
+    }
+    return saved;
 }
 
 function clearDuelState() {
-    try { sessionStorage.removeItem(DUEL_STORAGE_KEY); } catch (_) {}
+    if (!gameState.currentUser) return;
+    removeDuelStorage(gameState.currentUser);
 }
 
 // ============================================================
@@ -276,6 +301,13 @@ document.addEventListener('DOMContentLoaded', () => {
     initAuthEnterHandlers();
     initPresence();
     initBGM();
+
+    window.addEventListener('pagehide', () => {
+        if (duel?.channel && !duel.done) persistDuelState();
+    });
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden' && duel?.channel && !duel.done) persistDuelState();
+    });
 
     (async () => {
         // 1) Try resume duel first (covers refresh during active match)
@@ -470,6 +502,18 @@ function selectMode(mode) {
 function startTimer(displayId) {
     const display = document.getElementById(displayId);
     const start = Date.now();
+    return {
+        startTime: start,
+        interval: setInterval(() => {
+            const elapsed = (Date.now() - start) / 1000;
+            display.innerText = formatTime(elapsed);
+        }, 100)
+    };
+}
+
+function startTimerFromStartAt(displayId, startTimeMs) {
+    const display = document.getElementById(displayId);
+    const start = typeof startTimeMs === 'number' && startTimeMs > 0 ? startTimeMs : Date.now();
     return {
         startTime: start,
         interval: setInterval(() => {
@@ -950,9 +994,9 @@ function joinDuelRoom(room, restoreSnapshot = null) {
         duel.oppHistory = Array.isArray(restore.oppHistory) ? restore.oppHistory : duel.oppHistory;
         duel.oppTimeSec = restore.oppTimeSec ?? duel.oppTimeSec;
         duel.oppPoints = restore.oppPoints ?? duel.oppPoints;
-        duel._restoreElapsed = {
-            myElapsedSec: restore.myElapsedSec || 0,
-            oppElapsedSec: restore.oppElapsedSec || 0
+        duel._restoreTimerStarts = {
+            myTimerStartAt: restore.myTimerStartAt || 0,
+            oppTimerStartAt: restore.oppTimerStartAt || 0
         };
     }
 
@@ -982,8 +1026,11 @@ function joinDuelRoom(room, restoreSnapshot = null) {
     document.getElementById('feedback-opp').innerText = '';
     document.getElementById('history-my').innerHTML = '';
     document.getElementById('history-opp').innerHTML = '';
-    document.getElementById('stopwatch-my').innerText = duel._restoreElapsed ? formatTime(duel._restoreElapsed.myElapsedSec) : '00:00.0';
-    document.getElementById('stopwatch-opp').innerText = duel._restoreElapsed ? formatTime(duel._restoreElapsed.oppElapsedSec) : '00:00.0';
+    const now = Date.now();
+    const myStartAt = duel._restoreTimerStarts?.myTimerStartAt || 0;
+    const oppStartAt = duel._restoreTimerStarts?.oppTimerStartAt || 0;
+    document.getElementById('stopwatch-my').innerText = myStartAt ? formatTime((now - myStartAt) / 1000) : '00:00.0';
+    document.getElementById('stopwatch-opp').innerText = oppStartAt ? formatTime((now - oppStartAt) / 1000) : '00:00.0';
     if (duel.roundOver) document.getElementById('stopwatch-my').innerText = formatTime(duel.timeSec || 0);
     if (duel.oppRoundOver) document.getElementById('stopwatch-opp').innerText = formatTime(duel.oppTimeSec || 0);
     document.getElementById('duel-round-status').innerText = `ROUND ${duel.currentRound || 1}`;
@@ -1000,10 +1047,10 @@ function joinDuelRoom(room, restoreSnapshot = null) {
 
     // Start my timer
     if (!duel.roundOver && !duel.done) {
-        duel.timer = duel._restoreElapsed ? startTimerWithOffset('stopwatch-my', duel._restoreElapsed.myElapsedSec) : startTimer('stopwatch-my');
+        duel.timer = myStartAt ? startTimerFromStartAt('stopwatch-my', myStartAt) : startTimer('stopwatch-my');
     }
     // Start opponent display timer
-    duel.oppTimerStart = Date.now() - ((duel._restoreElapsed ? duel._restoreElapsed.oppElapsedSec : 0) * 1000);
+    duel.oppTimerStart = oppStartAt || Date.now();
     duel.oppTimerInterval = setInterval(() => {
         if (!duel.oppDone && !duel.oppRoundOver) {
             const elapsed = (Date.now() - duel.oppTimerStart) / 1000;
@@ -1046,7 +1093,7 @@ function joinDuelRoom(room, restoreSnapshot = null) {
         });
 
     console.log(`[DUEL JOINED] Room: ${room.id}, I am ${duel.myRole}, target: ${duel.myTarget}, opponent: ${duel.oppName}`);
-    delete duel._restoreElapsed;
+    delete duel._restoreTimerStarts;
     persistDuelState();
 }
 
