@@ -1167,7 +1167,9 @@ function ensureConfirmModal() {
         cancelBtn,
         resolve: null,
         prevFocus: null,
-        keyHandler: null
+        keyHandler: null,
+        closeTimer: null,
+        transitionHandler: null
     };
 
     function close(result) {
@@ -1175,17 +1177,34 @@ function ensureConfirmModal() {
         const resolve = state.resolve;
         state.resolve = null;
 
-        state.overlay.style.display = 'none';
-        state.overlay.setAttribute('aria-hidden', 'true');
+        const finish = () => {
+            if (state.transitionHandler) state.overlay.removeEventListener('transitionend', state.transitionHandler, true);
+            state.transitionHandler = null;
+            if (state.closeTimer) clearTimeout(state.closeTimer);
+            state.closeTimer = null;
 
-        if (state.keyHandler) document.removeEventListener('keydown', state.keyHandler, true);
-        state.keyHandler = null;
+            state.overlay.classList.remove('is-open', 'is-closing');
+            state.overlay.style.display = 'none';
+            state.overlay.setAttribute('aria-hidden', 'true');
 
-        const prev = state.prevFocus;
-        state.prevFocus = null;
-        if (prev && typeof prev.focus === 'function') prev.focus();
+            if (state.keyHandler) document.removeEventListener('keydown', state.keyHandler, true);
+            state.keyHandler = null;
 
-        resolve(result);
+            const prev = state.prevFocus;
+            state.prevFocus = null;
+            if (prev && typeof prev.focus === 'function') prev.focus();
+
+            resolve(result);
+        };
+
+        state.overlay.classList.remove('is-open');
+        state.overlay.classList.add('is-closing');
+
+        state.transitionHandler = (ev) => {
+            if (ev.target === state.overlay && ev.propertyName === 'opacity') finish();
+        };
+        state.overlay.addEventListener('transitionend', state.transitionHandler, true);
+        state.closeTimer = setTimeout(finish, 260);
     }
 
     okBtn.addEventListener('click', () => close(true));
@@ -1205,6 +1224,9 @@ function ensureConfirmModal() {
         state.prevFocus = document.activeElement;
         overlay.style.display = 'flex';
         overlay.setAttribute('aria-hidden', 'false');
+        overlay.classList.remove('is-closing');
+        overlay.classList.remove('is-open');
+        requestAnimationFrame(() => overlay.classList.add('is-open'));
 
         state.keyHandler = (ev) => {
             if (ev.key === 'Escape') {

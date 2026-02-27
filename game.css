@@ -1328,6 +1328,19 @@ input:focus, #player-name:focus {
     background: rgba(5, 5, 8, 0.78);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--transition-fast);
+}
+
+.modal-overlay.is-open {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.modal-overlay.is-closing {
+    opacity: 0;
+    pointer-events: none;
 }
 
 .modal-panel {
@@ -1339,6 +1352,19 @@ input:focus, #player-name:focus {
     padding: 1.5rem 1.5rem 1.25rem 1.5rem;
     position: relative;
     overflow: hidden;
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+    transition: transform var(--transition-slow), opacity var(--transition-fast);
+}
+
+.modal-overlay.is-open .modal-panel {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
+.modal-overlay.is-closing .modal-panel {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
 }
 
 .modal-panel::before {
@@ -1361,9 +1387,11 @@ input:focus, #player-name:focus {
 }
 
 .modal-message {
-    font-family: var(--font-main);
-    color: var(--text-dim);
-    line-height: 1.55;
+    font-family: var(--font-data);
+    font-size: 0.75rem;
+    letter-spacing: 1px;
+    color: rgba(255, 255, 255, 0.88);
+    line-height: 1.65;
     margin-bottom: 1.25rem;
     white-space: pre-wrap;
 }
@@ -1389,4 +1417,11 @@ input:focus, #player-name:focus {
     background: var(--neon-magenta);
     color: #000;
     box-shadow: 0 0 20px rgba(255, 0, 255, 0.35);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .modal-overlay,
+    .modal-panel {
+        transition: none;
+    }
 }
