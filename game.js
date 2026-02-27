@@ -376,7 +376,7 @@ function checkGuess() {
 
         // Auto-save SP for logged-in users
         if (gameState.currentUser) {
-            saveScore(gameState.difficulty, gameState.history.length, gameState.currentUser.toUpperCase(), 'solo', sp, Math.round(elapsed));
+            saveScore(gameState.difficulty, gameState.history.length, gameState.currentUser, 'solo', sp, Math.round(elapsed));
         }
         playSFX('win');
         showSoloResult(true, elapsed, sp);
@@ -1012,7 +1012,7 @@ function showDuelResult(isForfeit = false) {
     // Save Score to Leaderboard
     if (gameState.currentUser) {
         // We use the last difficulty played
-        saveScore(duel.difficulty, duel.history.length, gameState.currentUser.toUpperCase(), 'duel', myTotalDP, Math.round(duel.timeSec));
+        saveScore(duel.difficulty, duel.history.length, gameState.currentUser, 'duel', myTotalDP, Math.round(duel.timeSec));
     }
 
     const myName = gameState.currentUser.toUpperCase();
@@ -1150,7 +1150,7 @@ async function clearAllScores() {
 
 async function loadUserPoints() {
     if (!supabaseClient || !gameState.currentUser) return;
-    const uname = gameState.currentUser.toUpperCase();
+    const uname = gameState.currentUser;
 
     const { data } = await supabaseClient
         .from('scores')
