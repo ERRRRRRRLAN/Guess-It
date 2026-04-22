@@ -1,7 +1,14 @@
 // Supabase Configuration
 const SUPABASE_URL = 'https://tmysejqzjrbxcvmtsyup.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRteXNlanF6anJieGN2bXRzeXVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4ODYwNTEsImV4cCI6MjA5MjQ2MjA1MX0.5Lb-FWveCGGWlFbB8Ku_rLET6ja07zmpXKWe9yG497k';
-const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+    auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        storageKey: 'guess-it-auth-token'
+    }
+}) : null;
 
 // ============================================================
 // GAME STATE
@@ -259,6 +266,17 @@ function wait(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function resolveAuthUsernameWithRetry(maxAttempts = 3, delayMs = 250) {
+    for (let i = 0; i < maxAttempts; i++) {
+        try {
+            const resolved = await getUsernameFromActiveSession();
+            if (resolved) return resolved;
+        } catch (_) {}
+        if (i < maxAttempts - 1) await wait(delayMs);
+    }
+    return null;
+}
+
 async function finalizeLoginStateFromSession(fallbackUsername) {
     // Show logged-in state immediately, then refine username from session/profile in background.
     gameState.currentUser = fallbackUsername || gameState.currentUser || null;
@@ -435,7 +453,7 @@ const userAuth = {
     },
     checkSession: async () => {
         if (!supabaseClient) { gameState.currentUser = null; userAuth.updateUI(); return; }
-        const resolved = await getUsernameFromActiveSession();
+        const resolved = await resolveAuthUsernameWithRetry();
         if (resolved) {
             gameState.currentUser = resolved;
             localStorage.setItem(LAST_USERNAME_KEY, resolved);
@@ -544,10 +562,6 @@ document.addEventListener('DOMContentLoaded', () => {
     gameState.currentUser = null;
     userAuth.updateUI();
 
-    userAuth.checkSession().catch(() => {
-        gameState.currentUser = null;
-        userAuth.updateUI();
-    });
     if (supabaseClient?.auth) {
         supabaseClient.auth.onAuthStateChange(async (_event, session) => {
             if (!session?.user) {
@@ -555,7 +569,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 userAuth.updateUI();
                 return;
             }
-            gameState.currentUser = await getUsernameFromActiveSession();
+            gameState.currentUser = await resolveAuthUsernameWithRetry(2, 200) || emailToUsername(session.user.email);
             userAuth.updateUI();
         });
     }
@@ -571,6 +585,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     (async () => {
+        await userAuth.checkSession().catch(() => {
+            gameState.currentUser = null;
+            userAuth.updateUI();
+        });
+
         // 1) Try resume duel first (covers refresh during active match)
         const resumed = await tryResumeDuelFromStorage();
         if (resumed) return;
