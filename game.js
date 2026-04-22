@@ -348,10 +348,6 @@ const userAuth = {
         regBtn.disabled = true; regBtn.innerText = "PROSES...";
         try {
             const email = usernameToAuthEmail(user);
-            let signupCompleted = false;
-            let signupError = null;
-            let signupSession = null;
-
             setAuthFeedback('register', '> MEMBUAT AKUN...', false);
             const { data, error } = await withTimeout(
                 supabaseClient.auth.signUp({
@@ -362,61 +358,32 @@ const userAuth = {
                 AUTH_SIGNUP_TIMEOUT_MS,
                 'AUTH REQUEST TIMEOUT'
             );
-            signupCompleted = !error;
-            signupError = error;
-            signupSession = data?.session || null;
-
-            const alreadyRegistered = String(signupError?.message || '').toLowerCase().includes('already registered')
-                || String(signupError?.message || '').toLowerCase().includes('already been registered');
-
-            if (signupError && !alreadyRegistered && !isAuthTimeoutError(signupError)) {
-                setAuthFeedback('register', mapAuthErrorMessage(signupError), true);
+            if (error) {
+                const lower = String(error.message || '').toLowerCase();
+                if (lower.includes('already registered') || lower.includes('already been registered')) {
+                    setAuthFeedback('register', '> USERNAME SUDAH TERDAFTAR. SILAKAN LOGIN.', true);
+                    return;
+                }
+                setAuthFeedback('register', mapAuthErrorMessage(error), true);
                 return;
             }
 
-            if (signupSession) {
-                await finalizeLoginStateFromSession(user);
-                setAuthFeedback('register', '> DAFTAR & LOGIN BERHASIL', false);
-            } else {
-                setAuthFeedback('register', alreadyRegistered ? '> AKUN SUDAH ADA, MENCOBA LOGIN...' : '> MENYELESAIKAN LOGIN...', false);
-                const auto = await ensureSignedInAfterRegister(user, pass);
-                if (auto.ok) {
-                    await finalizeLoginStateFromSession(user);
-                    setAuthFeedback('register', alreadyRegistered ? '> LOGIN BERHASIL' : '> DAFTAR & LOGIN BERHASIL', false);
-                    return;
-                }
-
-                const lower = String(auto.error?.message || '').toLowerCase();
-                if (lower.includes('email not confirmed')) {
-                    setAuthFeedback('register', '> EMAIL CONFIRMATION MASIH AKTIF. NONAKTIFKAN AGAR AUTO-LOGIN LANGSUNG.', true);
-                    return;
-                }
-                if (lower.includes('invalid login credentials')) {
-                    if (alreadyRegistered) {
-                        setAuthFeedback('register', '> USERNAME SUDAH TERDAFTAR, TAPI PASSWORD TIDAK COCOK.', true);
-                    } else if (signupCompleted) {
-                        setAuthFeedback('register', '> AKUN TERSIMPAN, TAPI LOGIN BELUM MASUK. COBA LOGIN SEKALI.', true);
-                    } else {
-                        setAuthFeedback('register', '> GAGAL DAFTAR. COBA USERNAME LAIN.', true);
-                    }
-                    return;
-                }
-                setAuthFeedback('register', mapAuthErrorMessage(auto.error), true);
+            if (data?.session) {
+                try { await supabaseClient.auth.signOut(); } catch (_) {}
             }
+
+            const loginUser = document.getElementById('login-user');
+            const loginPass = document.getElementById('login-pass');
+            if (loginUser) loginUser.value = user;
+            if (loginPass) loginPass.value = pass;
+
+            setAuthFeedback('register', '> DAFTAR BERHASIL. MENGARAHKAN KE LOGIN...', false);
+            showPage('page-login');
+            setAuthFeedback('login', '> AKUN BERHASIL DIBUAT. LANJUT KLIK LOGIN.', false);
+            loginPass?.focus();
         } catch (err) {
             const errMsg = String(err?.message || 'KONEKSI GAGAL').toUpperCase();
-            if (isAuthTimeoutError(err)) {
-                setAuthFeedback('register', '> SERVER LAMBAT, MENYELESAIKAN LOGIN...', false);
-                const auto = await ensureSignedInAfterRegister(user, pass);
-                if (auto.ok) {
-                    await finalizeLoginStateFromSession(user);
-                    setAuthFeedback('register', '> DAFTAR & LOGIN BERHASIL', false);
-                    return;
-                }
-                setAuthFeedback('register', mapAuthErrorMessage(auto.error), true);
-                return;
-            }
-            setAuthFeedback('register', `> ERROR: ${errMsg}`, true);
+            setAuthFeedback('register', isAuthTimeoutError(err) ? '> SERVER AUTH LAMBAT, COBA DAFTAR LAGI.' : `> ERROR: ${errMsg}`, true);
         } finally {
             regBtn.disabled = false;
             regBtn.innerText = "BUAT AKUN";
