@@ -192,6 +192,18 @@ function emailToUsername(email) {
     return value.split('@')[0] || '';
 }
 
+function mapAuthErrorMessage(error) {
+    const msg = String(error?.message || '').toLowerCase();
+    if (!msg) return '> LOGIN GAGAL';
+    if (msg.includes('email not confirmed')) {
+        return '> EMAIL BELUM TERVERIFIKASI. MATIKAN EMAIL CONFIRMATION DI SUPABASE AUTH ATAU VERIFIKASI EMAIL USER.';
+    }
+    if (msg.includes('invalid login credentials')) return '> DATA SALAH';
+    if (msg.includes('user already registered')) return '> USERNAME SUDAH TERDAFTAR';
+    if (msg.includes('signup is disabled')) return '> SIGNUP SEDANG DINONAKTIFKAN DI SUPABASE AUTH';
+    return `> ERROR AUTH: ${String(error.message).toUpperCase()}`;
+}
+
 async function getUsernameFromActiveSession() {
     if (!supabaseClient) return null;
     const { data: { session } } = await supabaseClient.auth.getSession();
@@ -233,7 +245,7 @@ const userAuth = {
                 password: pass,
                 options: { data: { username: user } }
             });
-            if (error) { setFeedback(`> ERROR: ${error.message.toUpperCase()}`, true); return; }
+            if (error) { setFeedback(mapAuthErrorMessage(error), true); return; }
 
             if (data?.user?.id) {
                 await supabaseClient.from('profiles').upsert(
@@ -272,7 +284,7 @@ const userAuth = {
         try {
             const email = usernameToAuthEmail(user);
             const { error } = await supabaseClient.auth.signInWithPassword({ email, password: pass });
-            if (error) { setFeedback("> DATA SALAH", true); triggerFlash('flash-red'); return; }
+            if (error) { setFeedback(mapAuthErrorMessage(error), true); triggerFlash('flash-red'); return; }
 
             const resolved = await getUsernameFromActiveSession();
             gameState.currentUser = resolved || user;
