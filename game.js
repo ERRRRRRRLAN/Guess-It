@@ -214,9 +214,29 @@ function mapAuthErrorMessage(error) {
 function setAuthFeedback(scope, msg, isError = true) {
     const id = scope === 'register' ? 'auth-feedback-register' : 'auth-feedback-login';
     const el = document.getElementById(id);
-    if (!el) return;
+    if (!el) {
+        setFeedback(msg || '', !!isError);
+        return;
+    }
     el.textContent = msg || '';
     el.style.color = isError ? 'var(--accent-red)' : 'var(--neon-cyan)';
+}
+
+async function signInByUsernameAndPassword(username, password) {
+    const emails = usernameToAuthEmails(username);
+    let lastError = null;
+    for (const email of emails) {
+        const { error } = await withTimeout(
+            supabaseClient.auth.signInWithPassword({ email, password }),
+            AUTH_TIMEOUT_MS,
+            'AUTH REQUEST TIMEOUT'
+        );
+        if (!error) return { ok: true, error: null };
+        lastError = error;
+        const msg = String(error.message || '').toLowerCase();
+        if (!msg.includes('invalid login credentials')) break;
+    }
+    return { ok: false, error: lastError || new Error('LOGIN GAGAL') };
 }
 
 function withTimeout(promise, timeoutMs, timeoutLabel = 'REQUEST TIMEOUT') {
@@ -298,8 +318,22 @@ const userAuth = {
                 triggerGlobalGlitch(300, 'success');
                 setAuthFeedback('register', '> DAFTAR BERHASIL', false);
             } else {
-                setAuthFeedback('register', '> DAFTAR BERHASIL! LANJUT LOGIN', false);
-                setTimeout(() => showPage('page-login'), 1200);
+                // Some auth settings return user without session after signup.
+                // Try immediate sign-in so register feels seamless.
+                lastAuthAttempt = 0;
+                const signInResult = await signInByUsernameAndPassword(user, pass);
+                if (signInResult.ok) {
+                    const resolved = await getUsernameFromActiveSession();
+                    gameState.currentUser = resolved || user;
+                    if (gameState.currentUser) localStorage.setItem(LAST_USERNAME_KEY, gameState.currentUser);
+                    userAuth.updateUI();
+                    showPage('page-menu');
+                    triggerGlobalGlitch(300, 'success');
+                    setAuthFeedback('register', '> DAFTAR & LOGIN BERHASIL', false);
+                } else {
+                    setAuthFeedback('register', `> DAFTAR BERHASIL, TAPI AUTO-LOGIN GAGAL: ${mapAuthErrorMessage(signInResult.error)}`, true);
+                    setTimeout(() => showPage('page-login'), 1200);
+                }
             }
         } catch (err) {
             setAuthFeedback('register', `> ERROR: ${(err?.message || 'KONEKSI GAGAL').toUpperCase()}`, true);
@@ -320,22 +354,9 @@ const userAuth = {
         if (!loginBtn) { setAuthFeedback('login', '> TOMBOL LOGIN TIDAK DITEMUKAN', true); return; }
         loginBtn.disabled = true; loginBtn.innerText = "VERIFIKASI...";
         try {
-            const emails = usernameToAuthEmails(user);
-            let signedIn = false;
-            let lastError = null;
-            for (const email of emails) {
-                const { error } = await withTimeout(
-                    supabaseClient.auth.signInWithPassword({ email, password: pass }),
-                    AUTH_TIMEOUT_MS,
-                    'AUTH REQUEST TIMEOUT'
-                );
-                if (!error) { signedIn = true; break; }
-                lastError = error;
-                const msg = String(error.message || '').toLowerCase();
-                if (!msg.includes('invalid login credentials')) break;
-            }
-            if (!signedIn) {
-                setAuthFeedback('login', mapAuthErrorMessage(lastError || new Error('LOGIN GAGAL')), true);
+            const signInResult = await signInByUsernameAndPassword(user, pass);
+            if (!signInResult.ok) {
+                setAuthFeedback('login', mapAuthErrorMessage(signInResult.error), true);
                 triggerFlash('flash-red');
                 return;
             }
