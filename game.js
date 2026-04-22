@@ -170,9 +170,8 @@ const AUTH_EMAIL_DOMAIN = 'example.com';
 const LEGACY_AUTH_EMAIL_DOMAINS = ['guessit.local'];
 const USERNAME_REGEX = /^[a-z0-9_]{3,15}$/;
 const LAST_USERNAME_KEY = 'guess_it_last_username';
-const AUTH_TIMEOUT_MS = 12000;
-const POST_SIGNUP_LOGIN_ATTEMPTS = 2;
-const POST_SIGNUP_LOGIN_DELAY_MS = 900;
+const AUTH_TIMEOUT_MS = 7000;
+const AUTH_LOGIN_TIMEOUT_MS = 5000;
 
 let lastAuthAttempt = 0;
 function isRateLimited() {
@@ -224,14 +223,16 @@ function setAuthFeedback(scope, msg, isError = true) {
     el.style.color = isError ? 'var(--accent-red)' : 'var(--neon-cyan)';
 }
 
-async function signInByUsernameAndPassword(username, password) {
-    const emails = usernameToAuthEmails(username);
+async function signInByUsernameAndPassword(username, password, options = {}) {
+    const includeLegacy = options.includeLegacy !== false;
+    const timeoutMs = Number.isFinite(options.timeoutMs) ? options.timeoutMs : AUTH_LOGIN_TIMEOUT_MS;
+    const emails = includeLegacy ? usernameToAuthEmails(username) : [usernameToAuthEmail(username)];
     let lastError = null;
     for (const email of emails) {
         try {
             const { error } = await withTimeout(
                 supabaseClient.auth.signInWithPassword({ email, password }),
-                AUTH_TIMEOUT_MS,
+                timeoutMs,
                 'AUTH REQUEST TIMEOUT'
             );
             if (!error) return { ok: true, error: null };
@@ -247,10 +248,6 @@ async function signInByUsernameAndPassword(username, password) {
     return { ok: false, error: lastError || new Error('LOGIN GAGAL') };
 }
 
-function delay(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 async function finalizeLoginStateFromSession(fallbackUsername) {
     const resolved = await getUsernameFromActiveSession();
     gameState.currentUser = resolved || fallbackUsername || null;
@@ -260,20 +257,19 @@ async function finalizeLoginStateFromSession(fallbackUsername) {
     triggerGlobalGlitch(300, 'success');
 }
 
-async function tryPostSignupAutoLogin(username, password, sourceLabel = 'SIGNUP') {
+async function fastAutoLoginAfterRegister(username, password) {
     let lastError = null;
-    for (let i = 0; i < POST_SIGNUP_LOGIN_ATTEMPTS; i++) {
-        const result = await signInByUsernameAndPassword(username, password);
-        if (result.ok) {
-            await finalizeLoginStateFromSession(username);
-            setAuthFeedback('register', `> DAFTAR & LOGIN BERHASIL (${sourceLabel})`, false);
-            return { ok: true, error: null };
-        }
+    for (let i = 0; i < 2; i++) {
+        const result = await signInByUsernameAndPassword(username, password, {
+            includeLegacy: false,
+            timeoutMs: 4000
+        });
+        if (result.ok) return { ok: true, error: null };
         lastError = result.error;
-        if (i < POST_SIGNUP_LOGIN_ATTEMPTS - 1) {
-            setAuthFeedback('register', `> MENYIAPKAN LOGIN... (${i + 1}/${POST_SIGNUP_LOGIN_ATTEMPTS})`, false);
-            await delay(POST_SIGNUP_LOGIN_DELAY_MS);
-        }
+        const msg = String(result.error?.message || '').toLowerCase();
+        const retryable = msg.includes('timeout') || msg.includes('invalid login credentials');
+        if (!retryable || i === 1) break;
+        await new Promise((resolve) => setTimeout(resolve, 250));
     }
     return { ok: false, error: lastError || new Error('LOGIN GAGAL') };
 }
@@ -326,6 +322,7 @@ const userAuth = {
         regBtn.disabled = true; regBtn.innerText = "PROSES...";
         try {
             const email = usernameToAuthEmail(user);
+            setAuthFeedback('register', '> MEMBUAT AKUN...', false);
             const { data, error } = await withTimeout(
                 supabaseClient.auth.signUp({
                     email,
@@ -336,45 +333,52 @@ const userAuth = {
                 'AUTH REQUEST TIMEOUT'
             );
             if (error) {
-                const errMsg = mapAuthErrorMessage(error);
-                setAuthFeedback('register', errMsg, true);
                 const lower = String(error.message || '').toLowerCase();
                 if (lower.includes('already registered') || lower.includes('already been registered')) {
-                    lastAuthAttempt = 0;
-                    await userAuth.login();
+                    const directLogin = await signInByUsernameAndPassword(user, pass, { includeLegacy: true });
+                    if (directLogin.ok) {
+                        await finalizeLoginStateFromSession(user);
+                        setAuthFeedback('register', '> AKUN SUDAH ADA, LOGIN BERHASIL', false);
+                    } else {
+                        setAuthFeedback('register', '> USERNAME SUDAH TERDAFTAR. SILAKAN LOGIN.', true);
+                        setTimeout(() => showPage('page-login'), 500);
+                    }
+                    return;
                 }
+                setAuthFeedback('register', mapAuthErrorMessage(error), true);
                 return;
             }
 
-            // Profile row is created by DB trigger (handle_new_user_profile).
-            // Avoid blocking register flow with extra client upsert.
-
             if (data?.session) {
                 await finalizeLoginStateFromSession(user);
-                setAuthFeedback('register', '> DAFTAR BERHASIL', false);
+                setAuthFeedback('register', '> DAFTAR & LOGIN BERHASIL', false);
             } else {
-                lastAuthAttempt = 0;
-                const auto = await tryPostSignupAutoLogin(user, pass, 'NO_SESSION');
+                setAuthFeedback('register', '> AKUN DIBUAT, MENYELESAIKAN LOGIN...', false);
+                const auto = await fastAutoLoginAfterRegister(user, pass);
                 if (!auto.ok) {
                     const lower = String(auto.error?.message || '').toLowerCase();
                     if (lower.includes('email not confirmed')) {
-                        setAuthFeedback('register', '> DAFTAR BERHASIL. CEK EMAIL VERIFIKASI ATAU NONAKTIFKAN EMAIL CONFIRMATION DI SUPABASE AUTH.', true);
+                        setAuthFeedback('register', '> AKUN BERHASIL DIBUAT, TAPI EMAIL CONFIRMATION MASIH AKTIF. NONAKTIFKAN EMAIL CONFIRMATION AGAR AUTO-LOGIN LANGSUNG.', true);
                     } else {
-                        setAuthFeedback('register', '> DAFTAR BERHASIL. SILAKAN LOGIN MANUAL.', false);
+                        setAuthFeedback('register', '> AKUN BERHASIL DIBUAT. SILAKAN LOGIN.', false);
                     }
-                    setTimeout(() => showPage('page-login'), 1200);
+                    setTimeout(() => showPage('page-login'), 500);
+                } else {
+                    await finalizeLoginStateFromSession(user);
+                    setAuthFeedback('register', '> DAFTAR & LOGIN BERHASIL', false);
                 }
             }
         } catch (err) {
             const errMsg = String(err?.message || 'KONEKSI GAGAL').toUpperCase();
             if (errMsg.includes('AUTH REQUEST TIMEOUT') || errMsg.includes('REQUEST TIMEOUT') || errMsg.includes('TIMEOUT')) {
-                lastAuthAttempt = 0;
-                const auto = await tryPostSignupAutoLogin(user, pass, 'TIMEOUT');
+                const auto = await fastAutoLoginAfterRegister(user, pass);
                 if (auto.ok) {
+                    await finalizeLoginStateFromSession(user);
+                    setAuthFeedback('register', '> DAFTAR & LOGIN BERHASIL', false);
                     return;
                 }
-                setAuthFeedback('register', '> DAFTAR KEMUNGKINAN BERHASIL, TAPI KONFIRMASI LAMBAT. COBA LOGIN MANUAL.', true);
-                setTimeout(() => showPage('page-login'), 1200);
+                setAuthFeedback('register', '> SERVER LAMBAT. JIKA AKUN SUDAH TERBUAT, LANJUT LOGIN MANUAL.', true);
+                setTimeout(() => showPage('page-login'), 500);
                 return;
             }
             setAuthFeedback('register', `> ERROR: ${errMsg}`, true);
