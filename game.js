@@ -13,6 +13,25 @@ let gameState = {
     wrongGuesses: 0,
 };
 
+const DEBUG_MODE = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+
+function escapeHtml(value) {
+    const str = String(value ?? '');
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function clampInt(value, min, max, fallback = min) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    const i = Math.round(n);
+    return Math.min(max, Math.max(min, i));
+}
+
 const MODE_STORAGE_KEY = 'guess_it_mode';
 
 function persistMode(mode) {
@@ -147,14 +166,8 @@ function clearDuelState() {
 // ============================================================
 // CUSTOM AUTH
 // ============================================================
-const SESSION_KEY = 'guess_it_user_session';
-
-async function hashPassword(password) {
-    const msgUint8 = new TextEncoder().encode(password);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
+const AUTH_EMAIL_DOMAIN = 'guessit.local';
+const USERNAME_REGEX = /^[a-z0-9_]{3,15}$/;
 
 let lastAuthAttempt = 0;
 function isRateLimited() {
@@ -164,26 +177,76 @@ function isRateLimited() {
     return false;
 }
 
+function normalizeUsernameInput(raw) {
+    return String(raw || '').trim().toLowerCase();
+}
+
+function usernameToAuthEmail(username) {
+    return `${username}@${AUTH_EMAIL_DOMAIN}`;
+}
+
+function emailToUsername(email) {
+    const value = String(email || '').toLowerCase();
+    if (value.endsWith(`@${AUTH_EMAIL_DOMAIN}`)) return value.slice(0, value.indexOf('@'));
+    return value.split('@')[0] || '';
+}
+
+async function getUsernameFromActiveSession() {
+    if (!supabaseClient) return null;
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (!session?.user) return null;
+
+    const user = session.user;
+    const userMetaName = normalizeUsernameInput(user.user_metadata?.username || '');
+    if (userMetaName) return userMetaName;
+
+    const { data: profile } = await supabaseClient
+        .from('profiles')
+        .select('username')
+        .eq('id', user.id)
+        .maybeSingle();
+    if (profile?.username) return normalizeUsernameInput(profile.username);
+
+    return emailToUsername(user.email);
+}
+
 const userAuth = {
     register: async () => {
         if (!supabaseClient) { setFeedback("> SUPABASE CLIENT TIDAK TERSEDIA", true); return; }
         if (isRateLimited()) { setFeedback("> TUNGGU SEBENTAR...", true); return; }
-        const user = document.getElementById('reg-user').value.trim().toLowerCase();
+        const user = normalizeUsernameInput(document.getElementById('reg-user').value);
         const pass = document.getElementById('reg-pass').value.trim();
         if (!user || !pass) { setFeedback("> ISI SEMUA DATA", true); return; }
-        if (user.length < 3) { setFeedback("> USERNAME MIN 3 KARAKTER", true); return; }
+        if (!USERNAME_REGEX.test(user)) { setFeedback("> USERNAME: 3-15 (a-z, 0-9, _)", true); return; }
         if (pass.length < 6) { setFeedback("> PASSWORD MIN 6 KARAKTER", true); return; }
         const regBtn = document.querySelector('#page-register .btn-primary');
         regBtn.disabled = true; regBtn.innerText = "PROSES...";
         try {
-            const { data: existing, error: existingErr } = await supabaseClient.from('users').select('username').eq('username', user).maybeSingle();
-            if (existingErr) { setFeedback(`> ERROR: ${existingErr.message.toUpperCase()}`, true); return; }
-            if (existing) { setFeedback("> USERNAME SUDAH DIPAKAI", true); return; }
-            const hashedPass = await hashPassword(pass);
-            const { error } = await supabaseClient.from('users').insert([{ username: user, password_hash: hashedPass }]);
+            const email = usernameToAuthEmail(user);
+            const { data, error } = await supabaseClient.auth.signUp({
+                email,
+                password: pass,
+                options: { data: { username: user } }
+            });
             if (error) { setFeedback(`> ERROR: ${error.message.toUpperCase()}`, true); return; }
-            setFeedback("> DAFTAR BERHASIL! SILAKAN LOGIN", false);
-            setTimeout(() => showPage('page-login'), 1500);
+
+            if (data?.user?.id) {
+                await supabaseClient.from('profiles').upsert(
+                    { id: data.user.id, username: user },
+                    { onConflict: 'id' }
+                );
+            }
+
+            if (data?.session) {
+                gameState.currentUser = user;
+                userAuth.updateUI();
+                showPage('page-menu');
+                triggerGlobalGlitch(300, 'success');
+                setFeedback("> DAFTAR BERHASIL", false);
+            } else {
+                setFeedback("> DAFTAR BERHASIL! JIKA LOGIN GAGAL, NONAKTIFKAN EMAIL CONFIRMATION DI SUPABASE AUTH", true);
+                setTimeout(() => showPage('page-login'), 1200);
+            }
         } catch (err) {
             setFeedback(`> ERROR: ${(err?.message || 'KONEKSI GAGAL').toUpperCase()}`, true);
         } finally {
@@ -194,17 +257,19 @@ const userAuth = {
     login: async () => {
         if (!supabaseClient) { setFeedback("> SUPABASE CLIENT TIDAK TERSEDIA", true); return; }
         if (isRateLimited()) { setFeedback("> TUNGGU SEBENTAR...", true); return; }
-        const user = document.getElementById('login-user').value.trim().toLowerCase();
+        const user = normalizeUsernameInput(document.getElementById('login-user').value);
         const pass = document.getElementById('login-pass').value.trim();
         if (!user || !pass) { setFeedback("> ISI USERNAME & PASSWORD", true); return; }
+        if (!USERNAME_REGEX.test(user)) { setFeedback("> FORMAT USERNAME TIDAK VALID", true); return; }
         const loginBtn = document.querySelector('#page-login .btn-primary');
         loginBtn.disabled = true; loginBtn.innerText = "VERIFIKASI...";
         try {
-            const hashedPass = await hashPassword(pass);
-            const { data, error } = await supabaseClient.from('users').select('username, password_hash').eq('username', user).eq('password_hash', hashedPass).single();
-            if (error || !data) { setFeedback("> DATA SALAH", true); triggerFlash('flash-red'); return; }
-            localStorage.setItem(SESSION_KEY, data.username);
-            gameState.currentUser = data.username;
+            const email = usernameToAuthEmail(user);
+            const { error } = await supabaseClient.auth.signInWithPassword({ email, password: pass });
+            if (error) { setFeedback("> DATA SALAH", true); triggerFlash('flash-red'); return; }
+
+            const resolved = await getUsernameFromActiveSession();
+            gameState.currentUser = resolved || user;
             userAuth.updateUI(); showPage('page-menu'); triggerGlobalGlitch(300, 'success');
         } catch (err) {
             setFeedback(`> ERROR: ${(err?.message || 'KONEKSI GAGAL').toUpperCase()}`, true);
@@ -214,14 +279,14 @@ const userAuth = {
             loginBtn.innerText = "LOGIN";
         }
     },
-    logout: () => {
-        localStorage.removeItem(SESSION_KEY);
+    logout: async () => {
+        if (supabaseClient) await supabaseClient.auth.signOut();
         gameState.currentUser = null;
         userAuth.updateUI(); showPage('page-menu'); triggerGlobalGlitch(300, 'error');
     },
-    checkSession: () => {
-        const saved = localStorage.getItem(SESSION_KEY);
-        if (saved) gameState.currentUser = saved;
+    checkSession: async () => {
+        if (!supabaseClient) { gameState.currentUser = null; userAuth.updateUI(); return; }
+        gameState.currentUser = await getUsernameFromActiveSession();
         userAuth.updateUI();
     },
     updateUI: () => {
@@ -316,7 +381,21 @@ async function tryResumeDuelFromStorage() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    userAuth.checkSession();
+    userAuth.checkSession().catch(() => {
+        gameState.currentUser = null;
+        userAuth.updateUI();
+    });
+    if (supabaseClient?.auth) {
+        supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+            if (!session?.user) {
+                gameState.currentUser = null;
+                userAuth.updateUI();
+                return;
+            }
+            gameState.currentUser = await getUsernameFromActiveSession();
+            userAuth.updateUI();
+        });
+    }
     initAuthEnterHandlers();
     initPresence();
     initBGM();
@@ -611,7 +690,6 @@ function startGame(level) {
     document.getElementById('stopwatch').innerText = '00:00.0';
     showPage('page-game');
     soloTimer = startTimer('stopwatch');
-    console.log(`[SOLO] Target: ${gameState.targetNumber}`);
 }
 
 function renderHearts(containerId, total) {
@@ -703,7 +781,7 @@ function showSoloResult(isWin, timeSec, points) {
         const attempts = gameState.history.length;
         const timeStr = formatTime(timeSec);
         const pointsDisplay = `<div class="win-text-small" style="font-size:1.5rem; color:var(--neon-magenta); margin:0.5rem 0;">+${points} SP</div>`;
-        const statsDisplay = `<div class="win-text-small">${attempts} tebakan · ${timeStr} · ${gameState.wrongGuesses} salah · ×${difficulties[gameState.difficulty].multiplier}</div>`;
+        const statsDisplay = `<div class="win-text-small">${attempts} tebakan - ${timeStr} - ${gameState.wrongGuesses} salah - x${difficulties[gameState.difficulty].multiplier}</div>`;
         if (gameState.currentUser) {
             extraInfo = `${pointsDisplay}${statsDisplay}
                 <div class="win-text-small" style="color:var(--neon-cyan); margin-top:0.75rem;">&gt; POIN_DITAMBAHKAN_KE_TOTAL_SP</div>`;
@@ -724,7 +802,7 @@ function showSoloResult(isWin, timeSec, points) {
 }
 
 // ============================================================
-// ONLINE DUEL — MATCHMAKING
+// ONLINE DUEL - MATCHMAKING
 // ============================================================
 let matchmakingQueueId = null;
 let matchmakingChannel = null;
@@ -761,7 +839,7 @@ async function enterMatchmaking(difficulty) {
         return;
     }
 
-    // 2. No match — enter queue and wait
+    // 2. No match - enter queue and wait
     const { data: inserted, error } = await supabaseClient
         .from('matchmaking_queue')
         .insert([{ username: gameState.currentUser, difficulty: difficulty, status: 'waiting' }])
@@ -796,18 +874,27 @@ async function enterMatchmaking(difficulty) {
 
     // 4. Also poll as fallback (every 2s)
     matchmakingPollInterval = setInterval(async () => {
-        const { data: rooms } = await supabaseClient
+        const { data: roomsAsP1 } = await supabaseClient
             .from('duel_rooms')
             .select('*')
             .eq('status', 'active')
-            .or(`player1.eq.${gameState.currentUser},player2.eq.${gameState.currentUser}`)
+            .eq('player1', gameState.currentUser)
             .order('created_at', { ascending: false })
             .limit(1);
 
-        if (rooms && rooms.length > 0) {
-            console.log('[MATCH FOUND via Poll]', rooms[0]);
+        const { data: roomsAsP2 } = await supabaseClient
+            .from('duel_rooms')
+            .select('*')
+            .eq('status', 'active')
+            .eq('player2', gameState.currentUser)
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        const candidate = (roomsAsP1 && roomsAsP1[0]) || (roomsAsP2 && roomsAsP2[0]);
+        if (candidate) {
+            console.log('[MATCH FOUND via Poll]', candidate);
             cleanupMatchmaking();
-            joinDuelRoom(rooms[0]);
+            joinDuelRoom(candidate);
         }
     }, 2000);
 }
@@ -823,7 +910,7 @@ async function createDuelRoom(opponent, difficulty) {
     // Remove opponent from queue
     await supabaseClient.from('matchmaking_queue').delete().eq('id', opponent.id);
 
-    // Create room — opponent is player1 (they were waiting), we are player2
+    // Create room - opponent is player1 (they were waiting), we are player2
     const { data: room, error } = await supabaseClient
         .from('duel_rooms')
         .insert([{
@@ -867,7 +954,7 @@ function cleanupMatchmaking() {
 }
 
 // ============================================================
-// ONLINE DUEL — GAME ROOM
+// ONLINE DUEL - GAME ROOM
 // ============================================================
 let duel = {
     room: null,
@@ -1118,7 +1205,7 @@ function joinDuelRoom(room, restoreSnapshot = null) {
             }
         });
 
-    console.log(`[DUEL JOINED] Room: ${room.id}, I am ${duel.myRole}, target: ${duel.myTarget}, opponent: ${duel.oppName}`);
+    console.log(`[DUEL JOINED] Room: ${room.id}, I am ${duel.myRole}, opponent: ${duel.oppName}`);
     delete duel._restoreTimerStarts;
     persistDuelState();
 }
@@ -1153,7 +1240,7 @@ function submitDuelGuess() {
         
         document.getElementById('timer-my').innerHTML = ''; // Clear grace timer msg
 
-        document.getElementById('feedback-my').innerHTML = `✓ SELESAI! ${duel.points} DP`;
+        document.getElementById('feedback-my').innerHTML = `SELESAI! ${duel.points} DP`;
         document.getElementById('duel-my').classList.add('finished');
         triggerFlash('flash-cyan');
         playSFX('win');
@@ -1184,7 +1271,7 @@ function submitDuelGuess() {
             duel.roundWon = false;
             duel.points = 0;
             
-            document.getElementById('feedback-my').innerHTML = `✗ GAGAL! NYAWA HABIS`;
+            document.getElementById('feedback-my').innerHTML = `GAGAL! NYAWA HABIS`;
             document.getElementById('duel-my').classList.add('finished');
             playSFX('lose');
 
@@ -1236,49 +1323,87 @@ function broadcastGuessResult(data) {
     });
 }
 
-function handleOpponentBroadcast(data) {
-    if (data.sender === gameState.currentUser) return; // Ignore own broadcasts
+function normalizeOpponentPayload(rawData) {
+    if (!rawData || typeof rawData !== 'object') return null;
+    const sender = String(rawData.sender || '');
+    if (!sender || sender !== duel.oppName) return null;
 
-    // Handle opponent forfeit
-    if (data.forfeit) {
+    if (rawData.forfeit === true) {
+        return { sender, forfeit: true };
+    }
+
+    const rangeMax = difficulties[duel.difficulty]?.max || 100;
+    if (rawData.next_round_sync === true) {
+        return {
+            sender,
+            next_round_sync: true,
+            target1: clampInt(rawData.target1, 1, rangeMax, 1),
+            target2: clampInt(rawData.target2, 1, rangeMax, 1)
+        };
+    }
+
+    const safeMin = clampInt(rawData.min, 1, rangeMax, 1);
+    const safeMax = clampInt(rawData.max, 1, rangeMax, rangeMax);
+    const min = Math.min(safeMin, safeMax);
+    const max = Math.max(safeMin, safeMax);
+
+    return {
+        sender,
+        round_finished: rawData.round_finished === true,
+        still_playing: rawData.still_playing === true,
+        won: rawData.won === true,
+        lives: clampInt(rawData.lives, 0, duel.maxLives || 10, duel.maxLives || 10),
+        wrong: clampInt(rawData.wrong, 0, duel.maxLives || 10, 0),
+        totalGuesses: clampInt(rawData.totalGuesses, 0, 999, 0),
+        timeSec: clampInt(rawData.timeSec, 0, 36000, 0),
+        points: clampInt(rawData.points, 0, 5000, 0),
+        min,
+        max,
+        lastGuess: rawData.lastGuess == null ? null : clampInt(rawData.lastGuess, 1, rangeMax, 1)
+    };
+}
+
+function handleOpponentBroadcast(data) {
+    const safeData = normalizeOpponentPayload(data);
+    if (!safeData || safeData.sender === gameState.currentUser) return;
+
+    if (safeData.forfeit) {
         duel.done = true;
         duel.roundOver = true;
         duel.oppRoundOver = true;
         clearInterval(duel.oppTimerInterval);
-        document.getElementById('feedback-opp').innerHTML = '✗ MENYERAH';
+        document.getElementById('feedback-opp').innerText = 'MENYERAH';
         document.getElementById('duel-opp').classList.add('finished');
         document.getElementById('opp-status').innerHTML = '<span>MENYERAH</span>';
         playSFX('win');
-        showDuelResult(true); // My win by forfeit
+        showDuelResult(true);
         persistDuelState();
         return;
     }
 
-    // Handle Round Sync (Player 2 receives new targets from Player 1)
-    if (data.next_round_sync) {
-        duel.myTarget = duel.myRole === 'player1' ? data.target1 : data.target2;
-        duel.oppTarget = duel.myRole === 'player1' ? data.target2 : data.target1; // mostly for debugging/completeness
+    if (safeData.next_round_sync) {
+        duel.myTarget = duel.myRole === 'player1' ? safeData.target1 : safeData.target2;
+        duel.oppTarget = duel.myRole === 'player1' ? safeData.target2 : safeData.target1;
         startNextRound();
         persistDuelState();
         return;
     }
 
-    if (data.round_finished) {
+    if (safeData.round_finished) {
         duel.oppRoundOver = true;
-        duel.oppRoundWon = data.won;
-        duel.oppTimeSec = data.timeSec;
-        duel.oppPoints = data.points;
-        duel.oppWrong = data.wrong;
+        duel.oppRoundWon = safeData.won;
+        duel.oppTimeSec = safeData.timeSec;
+        duel.oppPoints = safeData.points;
+        duel.oppWrong = safeData.wrong;
         clearInterval(duel.oppTimerInterval);
-        document.getElementById('stopwatch-opp').innerText = formatTime(data.timeSec);
-        document.getElementById('feedback-opp').innerHTML = `✓ SELESAI! ${data.points} DP`;
+        document.getElementById('stopwatch-opp').innerText = formatTime(safeData.timeSec);
+        document.getElementById('feedback-opp').innerText = `SELESAI! ${safeData.points} DP`;
         document.getElementById('duel-opp').classList.add('finished');
-        document.getElementById('opp-status').innerHTML = `<span>SELESAI — ${data.points} DP</span>`;
-        
-        // Grace Period: iff opponent won (finished) and I haven't finished
-        if (data.won && !duel.roundOver && !duel.graceInterval) {
+        document.getElementById('opp-status').innerHTML = `<span>SELESAI - ${safeData.points} DP</span>`;
+
+        if (safeData.won && !duel.roundOver && !duel.graceInterval) {
             duel.graceTimeLeft = 30;
-            document.getElementById('timer-my').innerHTML = `LAWAN SELESAI! SISA WAKTU: ${duel.graceTimeLeft}s`;
+            document.getElementById('timer-my').innerText = `LAWAN SELESAI! SISA WAKTU: ${duel.graceTimeLeft}s`;
             triggerGlobalGlitch(300, 'error');
 
             duel.graceInterval = setInterval(() => {
@@ -1286,17 +1411,15 @@ function handleOpponentBroadcast(data) {
                 if (duel.graceTimeLeft <= 0) {
                     clearInterval(duel.graceInterval);
                     duel.graceInterval = null;
-                    document.getElementById('timer-my').innerHTML = ''; 
+                    document.getElementById('timer-my').innerText = '';
                     if (!duel.roundOver) {
-                        // Force Loss
                         const elapsed = stopTimer(duel.timer);
                         duel.timeSec = elapsed;
                         duel.roundOver = true;
                         duel.roundWon = false;
                         duel.points = 0;
                         document.getElementById('duel-my').classList.add('finished');
-                        document.getElementById('feedback-my').innerHTML = `<span style="color:var(--accent-red);">WAKTU HABIS! RONDE GAGAL</span>`;
-                        
+                        document.getElementById('feedback-my').innerHTML = '<span style="color:var(--accent-red);">WAKTU HABIS! RONDE GAGAL</span>';
                         broadcastGuessResult({
                             round_finished: true,
                             won: false,
@@ -1308,39 +1431,32 @@ function handleOpponentBroadcast(data) {
                         if (duel.oppRoundOver) finishRound();
                     }
                 } else {
-                    document.getElementById('timer-my').innerHTML = `LAWAN SELESAI! SISA WAKTU: ${duel.graceTimeLeft}s`;
+                    document.getElementById('timer-my').innerText = `LAWAN SELESAI! SISA WAKTU: ${duel.graceTimeLeft}s`;
                 }
             }, 1000);
         }
-
         if (duel.roundOver) finishRound();
         persistDuelState();
-    } else if (data.still_playing) {
-        // Opponent made a guess but still playing
-        duel.oppMin = data.min;
-        duel.oppMax = data.max;
-        duel.oppWrong = data.wrong;
-        if (data.lives !== undefined) {
-            duel.oppLives = data.lives;
-            updateHeartsUI('hearts-opp', data.lives);
+    } else if (safeData.still_playing) {
+        duel.oppMin = safeData.min;
+        duel.oppMax = safeData.max;
+        duel.oppWrong = safeData.wrong;
+        if (safeData.lives !== undefined) {
+            duel.oppLives = safeData.lives;
+            updateHeartsUI('hearts-opp', safeData.lives);
+        }
+        document.getElementById('low-opp').innerText = safeData.min;
+        document.getElementById('high-opp').innerText = safeData.max;
+
+        if (safeData.lastGuess !== null) {
+            updateHistoryUI(safeData.lastGuess, 'history-opp');
         }
 
-        // Update opponent range
-        document.getElementById('low-opp').innerText = data.min;
-        document.getElementById('high-opp').innerText = data.max;
-
-        // Update opponent history
-        if (data.lastGuess) {
-            updateHistoryUI(data.lastGuess, 'history-opp');
-        }
-
-        // Update status
-        const direction = data.lastGuess ? `Tebakan: [${data.lastGuess}]` : '';
-        document.getElementById('opp-status').innerHTML = `<span>${direction} · ${data.wrong} salah</span>`;
-        document.getElementById('feedback-opp').innerHTML = `&gt; ${data.min}-${data.max} · ${data.wrong} salah`;
+        const direction = safeData.lastGuess !== null ? `Tebakan: [${safeData.lastGuess}]` : '';
+        document.getElementById('opp-status').innerHTML = `<span>${direction} - ${safeData.wrong} salah</span>`;
+        document.getElementById('feedback-opp').innerText = `> ${safeData.min}-${safeData.max} - ${safeData.wrong} salah`;
     }
 }
-
 function finishRound() {
     if (duel.oppTimerInterval) clearInterval(duel.oppTimerInterval);
     
@@ -1525,8 +1641,9 @@ function showDuelResult(isForfeit = false) {
         saveScore(duel.difficulty, duel.history.length, gameState.currentUser, 'duel', myTotalDP, Math.round(duel.timeSec));
     }
 
-    const myName = gameState.currentUser.toUpperCase();
-    const oppName = duel.oppName.toUpperCase();
+    const myName = escapeHtml((gameState.currentUser || '').toUpperCase());
+    const oppName = escapeHtml((duel.oppName || '').toUpperCase());
+    const safeWinner = matchWinner ? escapeHtml(matchWinner.toUpperCase()) : 'DRAW';
     
     // Generate Round Summary HTML
     let roundsHtml = duel.roundResults.map(r => `
@@ -1540,7 +1657,7 @@ function showDuelResult(isForfeit = false) {
     const content = document.getElementById('duel-result-content');
     content.innerHTML = `
         <div class="result-status ${matchWinner === gameState.currentUser ? 'win-color' : 'lose-color'}">MATCH SELESAI</div>
-        <h1 style="-webkit-text-fill-color:initial; color:#fff; font-size:2rem;">PEMENANG: ${matchWinner ? matchWinner.toUpperCase() : 'DRAW'}</h1>
+        <h1 style="-webkit-text-fill-color:initial; color:#fff; font-size:2rem;">PEMENANG: ${safeWinner}</h1>
         
         <div style="margin: 1.5rem 0; background:rgba(255,255,255,0.02); padding:1rem; border:1px solid rgba(255,255,255,0.05);">
             <div style="display:flex; justify-content:space-between; font-family:var(--font-data); font-size:0.6rem; color:var(--neon-cyan); margin-bottom:0.5rem;">
@@ -1719,14 +1836,46 @@ async function exitDuel() {
 // ============================================================
 // SCORE SAVING
 // ============================================================
+const SCORE_RPC_SAVE = 'submit_score_secure';
+const SCORE_RPC_POINTS = 'get_my_points_secure';
+const ALLOW_LEGACY_SCORE_FALLBACK = DEBUG_MODE;
+
+function isMissingRpcError(error) {
+    const msg = String(error?.message || '').toLowerCase();
+    return msg.includes('does not exist') || msg.includes('could not find the function');
+}
+
 async function saveScore(difficulty, attempts, name, mode, points, timeSec) {
     if (!supabaseClient) { console.error('[SAVE] No supabase client'); return; }
-    const m = mode || 'solo';
-    const p = points || 0;
+    if (!gameState.currentUser || name !== gameState.currentUser) {
+        console.warn('[SAVE] blocked: invalid user context');
+        return;
+    }
+    const m = mode === 'duel' ? 'duel' : 'solo';
+    const p = clampInt(points, 0, 5000, 0);
+    const safeAttempts = clampInt(attempts, 1, 999, 1);
+    const safeTimeSec = clampInt(timeSec, 0, 36000, 0);
 
-    console.log(`[SAVE] user=${name}, mode=${m}, +${p} points`);
+    const { error: rpcErr } = await supabaseClient.rpc(SCORE_RPC_SAVE, {
+        p_mode: m,
+        p_difficulty: difficulty,
+        p_attempts: safeAttempts,
+        p_points: p,
+        p_time_seconds: safeTimeSec,
+        p_username: name
+    });
+    if (!rpcErr) {
+        loadUserPoints();
+        return;
+    }
 
-    // 1. Get existing total for this user+mode
+    if (!ALLOW_LEGACY_SCORE_FALLBACK) {
+        console.error('[SAVE] secure RPC failed:', rpcErr);
+        return;
+    }
+    console.warn('[SAVE] secure RPC unavailable, using legacy fallback (debug only):', rpcErr?.message || rpcErr);
+
+    // Legacy fallback: keeps local dev usable before SQL migration is applied.
     const { data: rows, error: selErr } = await supabaseClient
         .from('scores')
         .select('id, points')
@@ -1740,7 +1889,7 @@ async function saveScore(difficulty, attempts, name, mode, points, timeSec) {
     if (rows && rows.length > 0) {
         // Sum up all existing points (in case of duplicates)
         const existingTotal = rows.reduce((sum, r) => sum + (r.points || 0), 0);
-        totalPoints = existingTotal + p;
+        totalPoints = clampInt(existingTotal + p, 0, 100000000, p);
         console.log(`[SAVE] existing total=${existingTotal}, new total=${totalPoints}`);
 
         // Delete ALL old rows for this user+mode in one batch
@@ -1754,8 +1903,8 @@ async function saveScore(difficulty, attempts, name, mode, points, timeSec) {
     const { data: inserted, error: insErr } = await supabaseClient
         .from('scores')
         .insert([{
-            username: name, difficulty: difficulty, attempts: attempts,
-            mode: m, points: totalPoints, time_seconds: timeSec || 0
+            username: name, difficulty: difficulty, attempts: safeAttempts,
+            mode: m, points: totalPoints, time_seconds: safeTimeSec
         }])
         .select();
 
@@ -1767,6 +1916,10 @@ async function saveScore(difficulty, attempts, name, mode, points, timeSec) {
 
 // Utility: clear all scores (run in browser console: clearAllScores())
 async function clearAllScores() {
+    if (!DEBUG_MODE) {
+        console.warn('[DEBUG] clearAllScores is disabled outside localhost');
+        return;
+    }
     if (!supabaseClient) return;
     const { data } = await supabaseClient.from('scores').select('id');
     if (data) {
@@ -1780,6 +1933,22 @@ async function clearAllScores() {
 async function loadUserPoints() {
     if (!supabaseClient || !gameState.currentUser) return;
     const uname = gameState.currentUser;
+
+    const { data: secureRows, error: secureErr } = await supabaseClient.rpc(SCORE_RPC_POINTS);
+    if (!secureErr && Array.isArray(secureRows)) {
+        let sp = 0;
+        let dp = 0;
+        secureRows.forEach((row) => {
+            if (row.mode === 'solo') sp = clampInt(row.points, 0, 100000000, 0);
+            else if (row.mode === 'duel') dp = clampInt(row.points, 0, 100000000, 0);
+        });
+        document.getElementById('display-sp').innerText = formatNumber(sp);
+        document.getElementById('display-dp').innerText = formatNumber(dp);
+        return;
+    }
+    if (secureErr && !isMissingRpcError(secureErr)) {
+        console.warn('[POINTS] secure RPC failed, using legacy read fallback:', secureErr?.message || secureErr);
+    }
 
     const { data } = await supabaseClient
         .from('scores')
@@ -1809,12 +1978,12 @@ function formatPointsShort(n) {
 }
 
 async function handleSaveScore(timeSec, points) {
-    const nameInput = document.getElementById('player-name');
     const saveBtn = document.getElementById('save-score-btn');
-    const name = nameInput.value.trim().toUpperCase() || "PLAYER";
-    nameInput.disabled = true; saveBtn.disabled = true; saveBtn.innerText = "MENYIMPAN...";
+    const name = gameState.currentUser || '';
+    if (!name) return;
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.innerText = "MENYIMPAN..."; }
     await saveScore(gameState.difficulty, gameState.history.length, name, 'solo', points, timeSec);
-    saveBtn.innerText = "TERSIMPAN!";
+    if (saveBtn) saveBtn.innerText = "TERSIMPAN!";
     triggerGlobalGlitch(300, 'success');
 }
 
@@ -1857,11 +2026,13 @@ async function loadLeaderboardData(mode) {
         el.className = 'score-entry';
         el.style.animationDelay = `${index * 0.1}s`;
         const dateStr = new Date(entry.created_at).toLocaleDateString();
+        const safeUsername = escapeHtml((entry.username || 'USER').toUpperCase());
+        const safeDifficulty = escapeHtml(String(entry.difficulty || '-').toUpperCase());
         el.innerHTML = `
             <div style="display:flex; align-items:center; gap:0.75rem;">
                 <span class="rank-tag">#${index + 1}</span>
-                <span class="player-name-tag">${(entry.username || 'USER').toUpperCase()}</span>
-                <span class="diff-tag">${entry.difficulty.toUpperCase()}</span>
+                <span class="player-name-tag">${safeUsername}</span>
+                <span class="diff-tag">${safeDifficulty}</span>
             </div>
             <div style="display:flex; align-items:center; gap:1rem;">
                 <span class="score-value">${formatPointsShort(entry.points || 0)} ${pointLabel}</span>
@@ -1995,7 +2166,7 @@ function triggerGlobalGlitch(duration = 200, type = 'neutral') {
 function setFeedback(msg, shouldShake) {
     const feedback = document.getElementById('feedback-msg');
     if (!feedback) return;
-    feedback.innerHTML = msg;
+    feedback.textContent = msg;
     if (shouldShake) {
         const wrapper = document.querySelector('.main-wrapper');
         if (wrapper) { wrapper.classList.remove('shake'); void wrapper.offsetWidth; wrapper.classList.add('shake'); }
@@ -2008,3 +2179,4 @@ document.addEventListener('keypress', (e) => {
     if (document.getElementById('page-game').classList.contains('active')) checkGuess();
     else if (document.getElementById('duel-arena').style.display === 'block' && !duel.done) submitDuelGuess();
 });
+
