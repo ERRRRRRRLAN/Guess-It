@@ -43,15 +43,28 @@ set search_path = public
 as $$
 declare
     candidate text;
+    fallback_name text;
 begin
     candidate := lower(coalesce(new.raw_user_meta_data ->> 'username', split_part(new.email, '@', 1)));
     if candidate !~ '^[a-z0-9_]{3,15}$' then
         candidate := 'player_' || substr(replace(new.id::text, '-', ''), 1, 8);
     end if;
+    fallback_name := 'player_' || substr(replace(new.id::text, '-', ''), 1, 8);
 
-    insert into public.profiles (id, username)
-    values (new.id, candidate)
-    on conflict (id) do nothing;
+    begin
+        insert into public.profiles (id, username)
+        values (new.id, candidate)
+        on conflict (id) do update
+            set username = excluded.username,
+                updated_at = now();
+    exception when unique_violation then
+        -- Username already used by another account; avoid breaking signup.
+        insert into public.profiles (id, username)
+        values (new.id, fallback_name)
+        on conflict (id) do update
+            set username = excluded.username,
+                updated_at = now();
+    end;
 
     return new;
 end;
@@ -136,11 +149,20 @@ begin
         safe_username := 'player_' || substr(replace(uid::text, '-', ''), 1, 8);
     end if;
 
-    insert into public.profiles (id, username)
-    values (uid, safe_username)
-    on conflict (id) do update
-        set username = excluded.username,
-            updated_at = now();
+    begin
+        insert into public.profiles (id, username)
+        values (uid, safe_username)
+        on conflict (id) do update
+            set username = excluded.username,
+                updated_at = now();
+    exception when unique_violation then
+        safe_username := 'player_' || substr(replace(uid::text, '-', ''), 1, 8);
+        insert into public.profiles (id, username)
+        values (uid, safe_username)
+        on conflict (id) do update
+            set username = excluded.username,
+                updated_at = now();
+    end;
 
     insert into public.scores (user_id, username, mode, difficulty, attempts, points, time_seconds, updated_at)
     values (uid, safe_username, safe_mode, safe_difficulty, safe_attempts, safe_points, safe_time, now())
@@ -170,4 +192,3 @@ $$;
 grant execute on function public.get_my_points_secure() to authenticated;
 
 commit;
-

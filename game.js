@@ -231,15 +231,15 @@ async function getUsernameFromActiveSession() {
     }
     if (!user) return null;
 
-    const userMetaName = normalizeUsernameInput(user.user_metadata?.username || '');
-    if (userMetaName) return userMetaName;
-
     const { data: profile } = await supabaseClient
         .from('profiles')
         .select('username')
         .eq('id', user.id)
         .maybeSingle();
     if (profile?.username) return normalizeUsernameInput(profile.username);
+
+    const userMetaName = normalizeUsernameInput(user.user_metadata?.username || '');
+    if (userMetaName) return userMetaName;
 
     return emailToUsername(user.email);
 }
