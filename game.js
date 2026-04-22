@@ -170,8 +170,8 @@ const AUTH_EMAIL_DOMAIN = 'example.com';
 const LEGACY_AUTH_EMAIL_DOMAINS = ['guessit.local'];
 const USERNAME_REGEX = /^[a-z0-9_]{3,15}$/;
 const LAST_USERNAME_KEY = 'guess_it_last_username';
-const AUTH_TIMEOUT_MS = 7000;
-const AUTH_LOGIN_TIMEOUT_MS = 5000;
+const AUTH_TIMEOUT_MS = 5000;
+const AUTH_LOGIN_TIMEOUT_MS = 3500;
 
 let lastAuthAttempt = 0;
 function isRateLimited() {
@@ -259,17 +259,17 @@ async function finalizeLoginStateFromSession(fallbackUsername) {
 
 async function fastAutoLoginAfterRegister(username, password) {
     let lastError = null;
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < 3; i++) {
         const result = await signInByUsernameAndPassword(username, password, {
             includeLegacy: false,
-            timeoutMs: 4000
+            timeoutMs: 3000
         });
         if (result.ok) return { ok: true, error: null };
         lastError = result.error;
         const msg = String(result.error?.message || '').toLowerCase();
         const retryable = msg.includes('timeout') || msg.includes('invalid login credentials');
-        if (!retryable || i === 1) break;
-        await new Promise((resolve) => setTimeout(resolve, 250));
+        if (!retryable || i === 2) break;
+        await new Promise((resolve) => setTimeout(resolve, 150));
     }
     return { ok: false, error: lastError || new Error('LOGIN GAGAL') };
 }
@@ -340,8 +340,7 @@ const userAuth = {
                         await finalizeLoginStateFromSession(user);
                         setAuthFeedback('register', '> AKUN SUDAH ADA, LOGIN BERHASIL', false);
                     } else {
-                        setAuthFeedback('register', '> USERNAME SUDAH TERDAFTAR. SILAKAN LOGIN.', true);
-                        setTimeout(() => showPage('page-login'), 500);
+                        setAuthFeedback('register', '> USERNAME SUDAH TERDAFTAR, TAPI PASSWORD TIDAK COCOK.', true);
                     }
                     return;
                 }
@@ -360,9 +359,8 @@ const userAuth = {
                     if (lower.includes('email not confirmed')) {
                         setAuthFeedback('register', '> AKUN BERHASIL DIBUAT, TAPI EMAIL CONFIRMATION MASIH AKTIF. NONAKTIFKAN EMAIL CONFIRMATION AGAR AUTO-LOGIN LANGSUNG.', true);
                     } else {
-                        setAuthFeedback('register', '> AKUN BERHASIL DIBUAT. SILAKAN LOGIN.', false);
+                        setAuthFeedback('register', '> AKUN BERHASIL DIBUAT, TAPI LOGIN OTOMATIS BELUM BERHASIL. COBA KLIK DAFTAR LAGI 1X.', true);
                     }
-                    setTimeout(() => showPage('page-login'), 500);
                 } else {
                     await finalizeLoginStateFromSession(user);
                     setAuthFeedback('register', '> DAFTAR & LOGIN BERHASIL', false);
@@ -377,8 +375,7 @@ const userAuth = {
                     setAuthFeedback('register', '> DAFTAR & LOGIN BERHASIL', false);
                     return;
                 }
-                setAuthFeedback('register', '> SERVER LAMBAT. JIKA AKUN SUDAH TERBUAT, LANJUT LOGIN MANUAL.', true);
-                setTimeout(() => showPage('page-login'), 500);
+                setAuthFeedback('register', '> SERVER LAMBAT. AKUN MUNGKIN SUDAH TERBUAT, COBA KLIK DAFTAR LAGI 1X UNTUK AUTO-LOGIN.', true);
                 return;
             }
             setAuthFeedback('register', `> ERROR: ${errMsg}`, true);
