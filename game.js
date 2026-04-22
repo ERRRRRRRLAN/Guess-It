@@ -170,7 +170,7 @@ const AUTH_EMAIL_DOMAIN = 'example.com';
 const LEGACY_AUTH_EMAIL_DOMAINS = ['guessit.local'];
 const USERNAME_REGEX = /^[a-z0-9_]{3,15}$/;
 const LAST_USERNAME_KEY = 'guess_it_last_username';
-const AUTH_TIMEOUT_MS = 15000;
+const AUTH_TIMEOUT_MS = 30000;
 
 let lastAuthAttempt = 0;
 function isRateLimited() {
@@ -336,7 +336,23 @@ const userAuth = {
                 }
             }
         } catch (err) {
-            setAuthFeedback('register', `> ERROR: ${(err?.message || 'KONEKSI GAGAL').toUpperCase()}`, true);
+            const errMsg = String(err?.message || 'KONEKSI GAGAL').toUpperCase();
+            if (errMsg.includes('AUTH REQUEST TIMEOUT') || errMsg.includes('REQUEST TIMEOUT') || errMsg.includes('TIMEOUT')) {
+                // Signup may still have succeeded server-side; try logging in immediately.
+                lastAuthAttempt = 0;
+                const signInResult = await signInByUsernameAndPassword(user, pass);
+                if (signInResult.ok) {
+                    const resolved = await getUsernameFromActiveSession();
+                    gameState.currentUser = resolved || user;
+                    if (gameState.currentUser) localStorage.setItem(LAST_USERNAME_KEY, gameState.currentUser);
+                    userAuth.updateUI();
+                    showPage('page-menu');
+                    triggerGlobalGlitch(300, 'success');
+                    setAuthFeedback('register', '> DAFTAR BERHASIL (TIMEOUT DIKONFIRMASI DENGAN LOGIN)', false);
+                    return;
+                }
+            }
+            setAuthFeedback('register', `> ERROR: ${errMsg}`, true);
         } finally {
             regBtn.disabled = false;
             regBtn.innerText = "BUAT AKUN";
