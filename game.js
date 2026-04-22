@@ -171,6 +171,8 @@ const LEGACY_AUTH_EMAIL_DOMAINS = ['guessit.local'];
 const USERNAME_REGEX = /^[a-z0-9_]{3,15}$/;
 const LAST_USERNAME_KEY = 'guess_it_last_username';
 const AUTH_TIMEOUT_MS = 30000;
+const POST_SIGNUP_LOGIN_RETRIES = 6;
+const POST_SIGNUP_LOGIN_DELAY_MS = 1500;
 
 let lastAuthAttempt = 0;
 function isRateLimited() {
@@ -226,17 +228,54 @@ async function signInByUsernameAndPassword(username, password) {
     const emails = usernameToAuthEmails(username);
     let lastError = null;
     for (const email of emails) {
-        const { error } = await withTimeout(
-            supabaseClient.auth.signInWithPassword({ email, password }),
-            AUTH_TIMEOUT_MS,
-            'AUTH REQUEST TIMEOUT'
-        );
-        if (!error) return { ok: true, error: null };
-        lastError = error;
-        const msg = String(error.message || '').toLowerCase();
-        if (!msg.includes('invalid login credentials')) break;
+        try {
+            const { error } = await withTimeout(
+                supabaseClient.auth.signInWithPassword({ email, password }),
+                AUTH_TIMEOUT_MS,
+                'AUTH REQUEST TIMEOUT'
+            );
+            if (!error) return { ok: true, error: null };
+            lastError = error;
+            const msg = String(error.message || '').toLowerCase();
+            if (!msg.includes('invalid login credentials')) break;
+        } catch (err) {
+            lastError = err;
+            const msg = String(err?.message || '').toLowerCase();
+            if (!msg.includes('timeout')) break;
+        }
     }
     return { ok: false, error: lastError || new Error('LOGIN GAGAL') };
+}
+
+function delay(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function finalizeLoginStateFromSession(fallbackUsername) {
+    const resolved = await getUsernameFromActiveSession();
+    gameState.currentUser = resolved || fallbackUsername || null;
+    if (gameState.currentUser) localStorage.setItem(LAST_USERNAME_KEY, gameState.currentUser);
+    userAuth.updateUI();
+    showPage('page-menu');
+    triggerGlobalGlitch(300, 'success');
+}
+
+async function tryAutoLoginAfterSignup(username, password, sourceLabel = 'SIGNUP') {
+    for (let i = 0; i < POST_SIGNUP_LOGIN_RETRIES; i++) {
+        const result = await signInByUsernameAndPassword(username, password);
+        if (result.ok) {
+            await finalizeLoginStateFromSession(username);
+            setAuthFeedback('register', `> DAFTAR & LOGIN BERHASIL (${sourceLabel})`, false);
+            return true;
+        }
+        if (i < POST_SIGNUP_LOGIN_RETRIES - 1) {
+            setAuthFeedback('register', `> MENUNGGU KONFIRMASI SERVER... (${i + 1}/${POST_SIGNUP_LOGIN_RETRIES})`, false);
+            await delay(POST_SIGNUP_LOGIN_DELAY_MS);
+        } else {
+            setAuthFeedback('register', `> DAFTAR BERHASIL, TAPI AUTO-LOGIN GAGAL: ${mapAuthErrorMessage(result.error)}`, true);
+        }
+    }
+    return false;
 }
 
 function withTimeout(promise, timeoutMs, timeoutLabel = 'REQUEST TIMEOUT') {
@@ -311,44 +350,21 @@ const userAuth = {
             // Avoid blocking register flow with extra client upsert.
 
             if (data?.session) {
-                gameState.currentUser = user;
-                localStorage.setItem(LAST_USERNAME_KEY, user);
-                userAuth.updateUI();
-                showPage('page-menu');
-                triggerGlobalGlitch(300, 'success');
+                await finalizeLoginStateFromSession(user);
                 setAuthFeedback('register', '> DAFTAR BERHASIL', false);
             } else {
-                // Some auth settings return user without session after signup.
-                // Try immediate sign-in so register feels seamless.
                 lastAuthAttempt = 0;
-                const signInResult = await signInByUsernameAndPassword(user, pass);
-                if (signInResult.ok) {
-                    const resolved = await getUsernameFromActiveSession();
-                    gameState.currentUser = resolved || user;
-                    if (gameState.currentUser) localStorage.setItem(LAST_USERNAME_KEY, gameState.currentUser);
-                    userAuth.updateUI();
-                    showPage('page-menu');
-                    triggerGlobalGlitch(300, 'success');
-                    setAuthFeedback('register', '> DAFTAR & LOGIN BERHASIL', false);
-                } else {
-                    setAuthFeedback('register', `> DAFTAR BERHASIL, TAPI AUTO-LOGIN GAGAL: ${mapAuthErrorMessage(signInResult.error)}`, true);
+                const ok = await tryAutoLoginAfterSignup(user, pass, 'NO_SESSION');
+                if (!ok) {
                     setTimeout(() => showPage('page-login'), 1200);
                 }
             }
         } catch (err) {
             const errMsg = String(err?.message || 'KONEKSI GAGAL').toUpperCase();
             if (errMsg.includes('AUTH REQUEST TIMEOUT') || errMsg.includes('REQUEST TIMEOUT') || errMsg.includes('TIMEOUT')) {
-                // Signup may still have succeeded server-side; try logging in immediately.
                 lastAuthAttempt = 0;
-                const signInResult = await signInByUsernameAndPassword(user, pass);
-                if (signInResult.ok) {
-                    const resolved = await getUsernameFromActiveSession();
-                    gameState.currentUser = resolved || user;
-                    if (gameState.currentUser) localStorage.setItem(LAST_USERNAME_KEY, gameState.currentUser);
-                    userAuth.updateUI();
-                    showPage('page-menu');
-                    triggerGlobalGlitch(300, 'success');
-                    setAuthFeedback('register', '> DAFTAR BERHASIL (TIMEOUT DIKONFIRMASI DENGAN LOGIN)', false);
+                const ok = await tryAutoLoginAfterSignup(user, pass, 'TIMEOUT');
+                if (ok) {
                     return;
                 }
             }
