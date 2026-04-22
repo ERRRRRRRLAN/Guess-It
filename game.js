@@ -168,6 +168,7 @@ function clearDuelState() {
 // ============================================================
 const AUTH_EMAIL_DOMAIN = 'guessit.local';
 const USERNAME_REGEX = /^[a-z0-9_]{3,15}$/;
+const LAST_USERNAME_KEY = 'guess_it_last_username';
 
 let lastAuthAttempt = 0;
 function isRateLimited() {
@@ -194,9 +195,13 @@ function emailToUsername(email) {
 async function getUsernameFromActiveSession() {
     if (!supabaseClient) return null;
     const { data: { session } } = await supabaseClient.auth.getSession();
-    if (!session?.user) return null;
+    let user = session?.user || null;
+    if (!user) {
+        const { data: userData } = await supabaseClient.auth.getUser();
+        user = userData?.user || null;
+    }
+    if (!user) return null;
 
-    const user = session.user;
     const userMetaName = normalizeUsernameInput(user.user_metadata?.username || '');
     if (userMetaName) return userMetaName;
 
@@ -239,6 +244,7 @@ const userAuth = {
 
             if (data?.session) {
                 gameState.currentUser = user;
+                localStorage.setItem(LAST_USERNAME_KEY, user);
                 userAuth.updateUI();
                 showPage('page-menu');
                 triggerGlobalGlitch(300, 'success');
@@ -270,6 +276,7 @@ const userAuth = {
 
             const resolved = await getUsernameFromActiveSession();
             gameState.currentUser = resolved || user;
+            if (gameState.currentUser) localStorage.setItem(LAST_USERNAME_KEY, gameState.currentUser);
             userAuth.updateUI(); showPage('page-menu'); triggerGlobalGlitch(300, 'success');
         } catch (err) {
             setFeedback(`> ERROR: ${(err?.message || 'KONEKSI GAGAL').toUpperCase()}`, true);
@@ -280,13 +287,29 @@ const userAuth = {
         }
     },
     logout: async () => {
-        if (supabaseClient) await supabaseClient.auth.signOut();
-        gameState.currentUser = null;
-        userAuth.updateUI(); showPage('page-menu'); triggerGlobalGlitch(300, 'error');
+        try {
+            if (supabaseClient) await supabaseClient.auth.signOut();
+        } catch (err) {
+            console.warn('[AUTH] signOut failed, forcing local logout:', err?.message || err);
+        } finally {
+            gameState.currentUser = null;
+            localStorage.removeItem(LAST_USERNAME_KEY);
+            clearMatchmakingState();
+            clearDuelState();
+            userAuth.updateUI();
+            showPage('page-menu');
+            triggerGlobalGlitch(300, 'error');
+        }
     },
     checkSession: async () => {
         if (!supabaseClient) { gameState.currentUser = null; userAuth.updateUI(); return; }
-        gameState.currentUser = await getUsernameFromActiveSession();
+        const resolved = await getUsernameFromActiveSession();
+        if (resolved) {
+            gameState.currentUser = resolved;
+            localStorage.setItem(LAST_USERNAME_KEY, resolved);
+        } else {
+            gameState.currentUser = null;
+        }
         userAuth.updateUI();
     },
     updateUI: () => {
@@ -295,6 +318,10 @@ const userAuth = {
         const authActions = document.getElementById('auth-actions');
         const logoutBtn = document.querySelector('.logout-btn');
         const pointsDiv = document.getElementById('user-points');
+        const duelBtn = document.getElementById('duel-btn');
+        const duelLock = document.getElementById('duel-lock');
+        const duelLoginMsg = document.getElementById('duel-login-msg');
+        if (!profile || !display || !authActions || !logoutBtn || !pointsDiv || !duelBtn || !duelLock || !duelLoginMsg) return;
         if (gameState.currentUser) {
             profile.style.display = 'flex';
             display.innerText = gameState.currentUser.toUpperCase();
@@ -302,18 +329,18 @@ const userAuth = {
             pointsDiv.style.display = 'flex';
             loadUserPoints();
             // Unlock duel
-            document.getElementById('duel-btn').classList.remove('locked');
-            document.getElementById('duel-lock').style.display = 'none';
-            document.getElementById('duel-login-msg').style.display = 'none';
+            duelBtn.classList.remove('locked');
+            duelLock.style.display = 'none';
+            duelLoginMsg.style.display = 'none';
         } else {
             profile.style.display = 'flex';
             display.innerText = "GUEST";
             logoutBtn.style.display = 'none'; authActions.style.display = 'flex';
             pointsDiv.style.display = 'none';
             // Lock duel
-            document.getElementById('duel-btn').classList.add('locked');
-            document.getElementById('duel-lock').style.display = 'inline';
-            document.getElementById('duel-login-msg').style.display = 'block';
+            duelBtn.classList.add('locked');
+            duelLock.style.display = 'inline';
+            duelLoginMsg.style.display = 'block';
         }
     }
 };
