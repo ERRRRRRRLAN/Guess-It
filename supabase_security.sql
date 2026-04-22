@@ -1,8 +1,24 @@
--- Guess It - Security hardening migration
--- Run this in Supabase SQL Editor (project: pfzdtwvsghdwchrmogap)
+-- Guess It - Full migration (Auth + Score + Matchmaking + Duel)
+-- Run this in Supabase SQL Editor on a fresh project.
 
 begin;
 
+-- ============================================================
+-- Utilities
+-- ============================================================
+create or replace function public.set_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+    new.updated_at = now();
+    return new;
+end;
+$$;
+
+-- ============================================================
+-- Profiles
+-- ============================================================
 create table if not exists public.profiles (
     id uuid primary key references auth.users(id) on delete cascade,
     username text not null unique,
@@ -11,7 +27,15 @@ create table if not exists public.profiles (
     constraint profiles_username_format check (username ~ '^[a-z0-9_]{3,15}$')
 );
 
+drop trigger if exists trg_profiles_updated_at on public.profiles;
+create trigger trg_profiles_updated_at
+before update on public.profiles
+for each row execute function public.set_updated_at();
+
 alter table public.profiles enable row level security;
+
+revoke all on public.profiles from anon, authenticated;
+grant select, insert, update on public.profiles to authenticated;
 
 drop policy if exists profiles_select_self on public.profiles;
 create policy profiles_select_self
@@ -20,19 +44,19 @@ for select
 to authenticated
 using (auth.uid() = id);
 
+drop policy if exists profiles_insert_self on public.profiles;
+create policy profiles_insert_self
+on public.profiles
+for insert
+to authenticated
+with check (auth.uid() = id);
+
 drop policy if exists profiles_update_self on public.profiles;
 create policy profiles_update_self
 on public.profiles
 for update
 to authenticated
 using (auth.uid() = id)
-with check (auth.uid() = id);
-
-drop policy if exists profiles_insert_self on public.profiles;
-create policy profiles_insert_self
-on public.profiles
-for insert
-to authenticated
 with check (auth.uid() = id);
 
 create or replace function public.handle_new_user_profile()
@@ -49,6 +73,7 @@ begin
     if candidate !~ '^[a-z0-9_]{3,15}$' then
         candidate := 'player_' || substr(replace(new.id::text, '-', ''), 1, 8);
     end if;
+
     fallback_name := 'player_' || substr(replace(new.id::text, '-', ''), 1, 8);
 
     begin
@@ -58,7 +83,6 @@ begin
             set username = excluded.username,
                 updated_at = now();
     exception when unique_violation then
-        -- Username already used by another account; avoid breaking signup.
         insert into public.profiles (id, username)
         values (new.id, fallback_name)
         on conflict (id) do update
@@ -75,6 +99,9 @@ create trigger on_auth_user_created_profile
 after insert on auth.users
 for each row execute function public.handle_new_user_profile();
 
+-- ============================================================
+-- Scores (secure write via RPC only)
+-- ============================================================
 create table if not exists public.scores (
     id bigint generated always as identity primary key,
     user_id uuid not null references auth.users(id) on delete cascade,
@@ -91,14 +118,18 @@ create table if not exists public.scores (
     constraint scores_attempts_positive check (attempts > 0)
 );
 
-alter table public.scores add column if not exists user_id uuid;
-alter table public.scores add column if not exists updated_at timestamptz not null default now();
-alter table public.scores add column if not exists created_at timestamptz not null default now();
-
 create unique index if not exists scores_user_mode_unique_idx on public.scores(user_id, mode);
 create index if not exists scores_mode_points_idx on public.scores(mode, points desc, time_seconds asc);
 
+drop trigger if exists trg_scores_updated_at on public.scores;
+create trigger trg_scores_updated_at
+before update on public.scores
+for each row execute function public.set_updated_at();
+
 alter table public.scores enable row level security;
+
+revoke all on public.scores from anon, authenticated;
+grant select on public.scores to anon, authenticated;
 
 drop policy if exists scores_public_read on public.scores;
 create policy scores_public_read
@@ -106,10 +137,6 @@ on public.scores
 for select
 to anon, authenticated
 using (true);
-
--- Block direct client writes to scores; writes must go through secure RPC.
-revoke insert, update, delete on public.scores from anon, authenticated;
-grant select on public.scores to anon, authenticated;
 
 create or replace function public.submit_score_secure(
     p_mode text,
@@ -190,5 +217,157 @@ as $$
 $$;
 
 grant execute on function public.get_my_points_secure() to authenticated;
+
+-- ============================================================
+-- Matchmaking queue (direct client access with strict RLS)
+-- ============================================================
+create table if not exists public.matchmaking_queue (
+    id bigint generated always as identity primary key,
+    user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+    username text not null,
+    difficulty text not null,
+    status text not null default 'waiting',
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    constraint matchmaking_status_check check (status in ('waiting', 'matched', 'cancelled'))
+);
+
+create unique index if not exists matchmaking_unique_waiting_username_idx
+on public.matchmaking_queue(username)
+where status = 'waiting';
+
+create index if not exists matchmaking_lookup_idx on public.matchmaking_queue(status, difficulty, created_at);
+create index if not exists matchmaking_user_status_idx on public.matchmaking_queue(user_id, status);
+
+drop trigger if exists trg_matchmaking_queue_updated_at on public.matchmaking_queue;
+create trigger trg_matchmaking_queue_updated_at
+before update on public.matchmaking_queue
+for each row execute function public.set_updated_at();
+
+alter table public.matchmaking_queue enable row level security;
+
+revoke all on public.matchmaking_queue from anon, authenticated;
+grant select, insert, update, delete on public.matchmaking_queue to authenticated;
+
+drop policy if exists matchmaking_select_authenticated on public.matchmaking_queue;
+create policy matchmaking_select_authenticated
+on public.matchmaking_queue
+for select
+to authenticated
+using (true);
+
+drop policy if exists matchmaking_insert_self on public.matchmaking_queue;
+create policy matchmaking_insert_self
+on public.matchmaking_queue
+for insert
+to authenticated
+with check (
+    user_id = auth.uid()
+    and exists (
+        select 1
+        from public.profiles p
+        where p.id = auth.uid()
+          and p.username = public.matchmaking_queue.username
+    )
+);
+
+drop policy if exists matchmaking_update_self on public.matchmaking_queue;
+create policy matchmaking_update_self
+on public.matchmaking_queue
+for update
+to authenticated
+using (user_id = auth.uid())
+with check (user_id = auth.uid());
+
+drop policy if exists matchmaking_delete_self on public.matchmaking_queue;
+create policy matchmaking_delete_self
+on public.matchmaking_queue
+for delete
+to authenticated
+using (user_id = auth.uid());
+
+-- ============================================================
+-- Duel rooms (direct client read/write with participant-only RLS)
+-- ============================================================
+create table if not exists public.duel_rooms (
+    id bigint generated always as identity primary key,
+    player1 text not null,
+    player2 text not null,
+    difficulty text not null,
+    target1 integer not null,
+    target2 integer not null,
+    status text not null default 'active',
+    winner text null,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    finished_at timestamptz null,
+    constraint duel_status_check check (status in ('active', 'finished', 'abandoned')),
+    constraint duel_players_not_equal check (player1 <> player2),
+    constraint duel_targets_positive check (target1 > 0 and target2 > 0)
+);
+
+create index if not exists duel_rooms_status_created_idx on public.duel_rooms(status, created_at desc);
+create index if not exists duel_rooms_player1_status_idx on public.duel_rooms(player1, status);
+create index if not exists duel_rooms_player2_status_idx on public.duel_rooms(player2, status);
+
+drop trigger if exists trg_duel_rooms_updated_at on public.duel_rooms;
+create trigger trg_duel_rooms_updated_at
+before update on public.duel_rooms
+for each row execute function public.set_updated_at();
+
+alter table public.duel_rooms enable row level security;
+
+revoke all on public.duel_rooms from anon, authenticated;
+grant select, insert, update on public.duel_rooms to authenticated;
+
+drop policy if exists duel_rooms_select_participants on public.duel_rooms;
+create policy duel_rooms_select_participants
+on public.duel_rooms
+for select
+to authenticated
+using (
+    exists (
+        select 1
+        from public.profiles p
+        where p.id = auth.uid()
+          and (p.username = public.duel_rooms.player1 or p.username = public.duel_rooms.player2)
+    )
+);
+
+drop policy if exists duel_rooms_insert_participant on public.duel_rooms;
+create policy duel_rooms_insert_participant
+on public.duel_rooms
+for insert
+to authenticated
+with check (
+    exists (
+        select 1
+        from public.profiles p
+        where p.id = auth.uid()
+          and (p.username = public.duel_rooms.player1 or p.username = public.duel_rooms.player2)
+    )
+);
+
+drop policy if exists duel_rooms_update_participants on public.duel_rooms;
+create policy duel_rooms_update_participants
+on public.duel_rooms
+for update
+to authenticated
+using (
+    exists (
+        select 1
+        from public.profiles p
+        where p.id = auth.uid()
+          and (p.username = public.duel_rooms.player1 or p.username = public.duel_rooms.player2)
+    )
+)
+with check (
+    exists (
+        select 1
+        from public.profiles p
+        where p.id = auth.uid()
+          and (p.username = public.duel_rooms.player1 or p.username = public.duel_rooms.player2)
+    )
+);
 
 commit;
