@@ -170,7 +170,7 @@ const AUTH_EMAIL_DOMAIN = 'example.com';
 const LEGACY_AUTH_EMAIL_DOMAINS = ['guessit.local'];
 const USERNAME_REGEX = /^[a-z0-9_]{3,15}$/;
 const LAST_USERNAME_KEY = 'guess_it_last_username';
-const AUTH_SIGNUP_TIMEOUT_MS = 10000;
+const AUTH_SIGNUP_TIMEOUT_MS = 8000;
 const AUTH_LOGIN_TIMEOUT_MS = 6000;
 
 let lastAuthAttempt = 0;
@@ -255,6 +255,10 @@ function isAuthTimeoutError(error) {
     return msg.includes('timeout') || msg.includes('request timeout');
 }
 
+function wait(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function finalizeLoginStateFromSession(fallbackUsername) {
     // Show logged-in state immediately, then refine username from session/profile in background.
     gameState.currentUser = fallbackUsername || gameState.currentUser || null;
@@ -273,19 +277,25 @@ async function finalizeLoginStateFromSession(fallbackUsername) {
     } catch (_) {}
 }
 
-async function fastAutoLoginAfterRegister(username, password) {
+async function ensureSignedInAfterRegister(username, password) {
+    const plan = [
+        { waitMs: 0, timeoutMs: 3500, includeLegacy: false },
+        { waitMs: 200, timeoutMs: 3500, includeLegacy: false },
+        { waitMs: 450, timeoutMs: 4000, includeLegacy: false },
+        { waitMs: 800, timeoutMs: 5000, includeLegacy: true }
+    ];
     let lastError = null;
-    for (let i = 0; i < 4; i++) {
+    for (const step of plan) {
+        if (step.waitMs > 0) await wait(step.waitMs);
         const result = await signInByUsernameAndPassword(username, password, {
-            includeLegacy: false,
-            timeoutMs: 5000
+            includeLegacy: step.includeLegacy,
+            timeoutMs: step.timeoutMs
         });
         if (result.ok) return { ok: true, error: null };
         lastError = result.error;
         const msg = String(result.error?.message || '').toLowerCase();
-        const retryable = msg.includes('timeout') || msg.includes('invalid login credentials') || msg.includes('network');
-        if (!retryable || i === 3) break;
-        await new Promise((resolve) => setTimeout(resolve, 350));
+        const retryable = msg.includes('timeout') || msg.includes('invalid login credentials') || msg.includes('network') || msg.includes('failed to fetch');
+        if (!retryable) break;
     }
     return { ok: false, error: lastError || new Error('LOGIN GAGAL') };
 }
@@ -338,6 +348,10 @@ const userAuth = {
         regBtn.disabled = true; regBtn.innerText = "PROSES...";
         try {
             const email = usernameToAuthEmail(user);
+            let signupCompleted = false;
+            let signupError = null;
+            let signupSession = null;
+
             setAuthFeedback('register', '> MEMBUAT AKUN...', false);
             const { data, error } = await withTimeout(
                 supabaseClient.auth.signUp({
@@ -348,51 +362,58 @@ const userAuth = {
                 AUTH_SIGNUP_TIMEOUT_MS,
                 'AUTH REQUEST TIMEOUT'
             );
-            if (error) {
-                const lower = String(error.message || '').toLowerCase();
-                if (lower.includes('already registered') || lower.includes('already been registered')) {
-                    const directLogin = await signInByUsernameAndPassword(user, pass, { includeLegacy: true });
-                    if (directLogin.ok) {
-                        await finalizeLoginStateFromSession(user);
-                        setAuthFeedback('register', '> AKUN SUDAH ADA, LOGIN BERHASIL', false);
-                    } else {
-                        const mapped = mapAuthErrorMessage(directLogin.error);
-                        setAuthFeedback('register', mapped.includes('DATA SALAH') ? '> USERNAME SUDAH TERDAFTAR, TAPI PASSWORD TIDAK COCOK.' : mapped, true);
-                    }
-                    return;
-                }
-                setAuthFeedback('register', mapAuthErrorMessage(error), true);
+            signupCompleted = !error;
+            signupError = error;
+            signupSession = data?.session || null;
+
+            const alreadyRegistered = String(signupError?.message || '').toLowerCase().includes('already registered')
+                || String(signupError?.message || '').toLowerCase().includes('already been registered');
+
+            if (signupError && !alreadyRegistered && !isAuthTimeoutError(signupError)) {
+                setAuthFeedback('register', mapAuthErrorMessage(signupError), true);
                 return;
             }
 
-            if (data?.session) {
+            if (signupSession) {
                 await finalizeLoginStateFromSession(user);
                 setAuthFeedback('register', '> DAFTAR & LOGIN BERHASIL', false);
             } else {
-                setAuthFeedback('register', '> AKUN DIBUAT, MENYELESAIKAN LOGIN...', false);
-                const auto = await fastAutoLoginAfterRegister(user, pass);
-                if (!auto.ok) {
-                    const lower = String(auto.error?.message || '').toLowerCase();
-                    if (lower.includes('email not confirmed')) {
-                        setAuthFeedback('register', '> AKUN BERHASIL DIBUAT, TAPI EMAIL CONFIRMATION MASIH AKTIF. NONAKTIFKAN EMAIL CONFIRMATION AGAR AUTO-LOGIN LANGSUNG.', true);
-                    } else {
-                        setAuthFeedback('register', '> AKUN BERHASIL DIBUAT, TAPI LOGIN OTOMATIS BELUM BERHASIL. COBA KLIK DAFTAR LAGI 1X.', true);
-                    }
-                } else {
+                setAuthFeedback('register', alreadyRegistered ? '> AKUN SUDAH ADA, MENCOBA LOGIN...' : '> MENYELESAIKAN LOGIN...', false);
+                const auto = await ensureSignedInAfterRegister(user, pass);
+                if (auto.ok) {
                     await finalizeLoginStateFromSession(user);
-                    setAuthFeedback('register', '> DAFTAR & LOGIN BERHASIL', false);
+                    setAuthFeedback('register', alreadyRegistered ? '> LOGIN BERHASIL' : '> DAFTAR & LOGIN BERHASIL', false);
+                    return;
                 }
+
+                const lower = String(auto.error?.message || '').toLowerCase();
+                if (lower.includes('email not confirmed')) {
+                    setAuthFeedback('register', '> EMAIL CONFIRMATION MASIH AKTIF. NONAKTIFKAN AGAR AUTO-LOGIN LANGSUNG.', true);
+                    return;
+                }
+                if (lower.includes('invalid login credentials')) {
+                    if (alreadyRegistered) {
+                        setAuthFeedback('register', '> USERNAME SUDAH TERDAFTAR, TAPI PASSWORD TIDAK COCOK.', true);
+                    } else if (signupCompleted) {
+                        setAuthFeedback('register', '> AKUN TERSIMPAN, TAPI LOGIN BELUM MASUK. COBA LOGIN SEKALI.', true);
+                    } else {
+                        setAuthFeedback('register', '> GAGAL DAFTAR. COBA USERNAME LAIN.', true);
+                    }
+                    return;
+                }
+                setAuthFeedback('register', mapAuthErrorMessage(auto.error), true);
             }
         } catch (err) {
             const errMsg = String(err?.message || 'KONEKSI GAGAL').toUpperCase();
             if (isAuthTimeoutError(err)) {
-                const auto = await fastAutoLoginAfterRegister(user, pass);
+                setAuthFeedback('register', '> SERVER LAMBAT, MENYELESAIKAN LOGIN...', false);
+                const auto = await ensureSignedInAfterRegister(user, pass);
                 if (auto.ok) {
                     await finalizeLoginStateFromSession(user);
                     setAuthFeedback('register', '> DAFTAR & LOGIN BERHASIL', false);
                     return;
                 }
-                setAuthFeedback('register', '> SERVER SEDANG LAMBAT. AKUN MUNGKIN SUDAH TERBUAT, COBA LOGIN SEKALI DENGAN USERNAME & PASSWORD YANG SAMA.', true);
+                setAuthFeedback('register', mapAuthErrorMessage(auto.error), true);
                 return;
             }
             setAuthFeedback('register', `> ERROR: ${errMsg}`, true);
@@ -420,11 +441,8 @@ const userAuth = {
                 return;
             }
 
-            const resolved = await getUsernameFromActiveSession();
-            gameState.currentUser = resolved || user;
-            if (gameState.currentUser) localStorage.setItem(LAST_USERNAME_KEY, gameState.currentUser);
             setAuthFeedback('login', '> LOGIN BERHASIL', false);
-            userAuth.updateUI(); showPage('page-menu'); triggerGlobalGlitch(300, 'success');
+            await finalizeLoginStateFromSession(user);
         } catch (err) {
             setAuthFeedback('login', `> ERROR: ${(err?.message || 'KONEKSI GAGAL').toUpperCase()}`, true);
             triggerFlash('flash-red');
