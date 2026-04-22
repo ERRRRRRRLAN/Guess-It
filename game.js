@@ -266,6 +266,17 @@ function wait(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function tryRecoverSession() {
+    if (!supabaseClient?.auth) return null;
+    try {
+        const { data, error } = await supabaseClient.auth.refreshSession();
+        if (error) return null;
+        return data?.session || null;
+    } catch (_) {
+        return null;
+    }
+}
+
 async function resolveAuthUsernameWithRetry(maxAttempts = 3, delayMs = 250) {
     for (let i = 0; i < maxAttempts; i++) {
         try {
@@ -454,9 +465,13 @@ const userAuth = {
     checkSession: async () => {
         if (!supabaseClient) { gameState.currentUser = null; userAuth.updateUI(); return; }
         const resolved = await resolveAuthUsernameWithRetry();
-        if (resolved) {
-            gameState.currentUser = resolved;
-            localStorage.setItem(LAST_USERNAME_KEY, resolved);
+        if (!resolved) {
+            await tryRecoverSession();
+        }
+        const resolvedAfterRefresh = resolved || await resolveAuthUsernameWithRetry(4, 300);
+        if (resolvedAfterRefresh) {
+            gameState.currentUser = resolvedAfterRefresh;
+            localStorage.setItem(LAST_USERNAME_KEY, resolvedAfterRefresh);
         } else {
             gameState.currentUser = null;
         }
@@ -563,13 +578,33 @@ document.addEventListener('DOMContentLoaded', () => {
     userAuth.updateUI();
 
     if (supabaseClient?.auth) {
-        supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+        supabaseClient.auth.onAuthStateChange(async (event, session) => {
             if (!session?.user) {
-                gameState.currentUser = null;
-                userAuth.updateUI();
+                // On refresh, auth state can briefly be null before storage lock/session recovery.
+                const recovered = await resolveAuthUsernameWithRetry(4, 250);
+                if (recovered) {
+                    gameState.currentUser = recovered;
+                    localStorage.setItem(LAST_USERNAME_KEY, recovered);
+                    userAuth.updateUI();
+                    return;
+                }
+                await tryRecoverSession();
+                const recoveredAfterRefresh = await resolveAuthUsernameWithRetry(4, 250);
+                if (recoveredAfterRefresh) {
+                    gameState.currentUser = recoveredAfterRefresh;
+                    localStorage.setItem(LAST_USERNAME_KEY, recoveredAfterRefresh);
+                    userAuth.updateUI();
+                    return;
+                }
+                // Only clear when truly signed out
+                if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+                    gameState.currentUser = null;
+                    userAuth.updateUI();
+                }
                 return;
             }
             gameState.currentUser = await resolveAuthUsernameWithRetry(2, 200) || emailToUsername(session.user.email);
+            localStorage.setItem(LAST_USERNAME_KEY, gameState.currentUser);
             userAuth.updateUI();
         });
     }
