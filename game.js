@@ -170,8 +170,8 @@ const AUTH_EMAIL_DOMAIN = 'example.com';
 const LEGACY_AUTH_EMAIL_DOMAINS = ['guessit.local'];
 const USERNAME_REGEX = /^[a-z0-9_]{3,15}$/;
 const LAST_USERNAME_KEY = 'guess_it_last_username';
-const AUTH_TIMEOUT_MS = 5000;
-const AUTH_LOGIN_TIMEOUT_MS = 3500;
+const AUTH_SIGNUP_TIMEOUT_MS = 10000;
+const AUTH_LOGIN_TIMEOUT_MS = 6000;
 
 let lastAuthAttempt = 0;
 function isRateLimited() {
@@ -203,6 +203,8 @@ function emailToUsername(email) {
 function mapAuthErrorMessage(error) {
     const msg = String(error?.message || '').toLowerCase();
     if (!msg) return '> LOGIN GAGAL';
+    if (msg.includes('timeout')) return '> SERVER AUTH LAMBAT, COBA LAGI.';
+    if (msg.includes('network') || msg.includes('failed to fetch')) return '> KONEKSI INTERNET TIDAK STABIL.';
     if (msg.includes('email not confirmed')) {
         return '> EMAIL BELUM TERVERIFIKASI. MATIKAN EMAIL CONFIRMATION DI SUPABASE AUTH ATAU VERIFIKASI EMAIL USER.';
     }
@@ -248,28 +250,42 @@ async function signInByUsernameAndPassword(username, password, options = {}) {
     return { ok: false, error: lastError || new Error('LOGIN GAGAL') };
 }
 
+function isAuthTimeoutError(error) {
+    const msg = String(error?.message || '').toLowerCase();
+    return msg.includes('timeout') || msg.includes('request timeout');
+}
+
 async function finalizeLoginStateFromSession(fallbackUsername) {
-    const resolved = await getUsernameFromActiveSession();
-    gameState.currentUser = resolved || fallbackUsername || null;
+    // Show logged-in state immediately, then refine username from session/profile in background.
+    gameState.currentUser = fallbackUsername || gameState.currentUser || null;
     if (gameState.currentUser) localStorage.setItem(LAST_USERNAME_KEY, gameState.currentUser);
     userAuth.updateUI();
     showPage('page-menu');
     triggerGlobalGlitch(300, 'success');
+
+    try {
+        const resolved = await getUsernameFromActiveSession();
+        if (resolved && resolved !== gameState.currentUser) {
+            gameState.currentUser = resolved;
+            localStorage.setItem(LAST_USERNAME_KEY, resolved);
+            userAuth.updateUI();
+        }
+    } catch (_) {}
 }
 
 async function fastAutoLoginAfterRegister(username, password) {
     let lastError = null;
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 4; i++) {
         const result = await signInByUsernameAndPassword(username, password, {
             includeLegacy: false,
-            timeoutMs: 3000
+            timeoutMs: 5000
         });
         if (result.ok) return { ok: true, error: null };
         lastError = result.error;
         const msg = String(result.error?.message || '').toLowerCase();
-        const retryable = msg.includes('timeout') || msg.includes('invalid login credentials');
-        if (!retryable || i === 2) break;
-        await new Promise((resolve) => setTimeout(resolve, 150));
+        const retryable = msg.includes('timeout') || msg.includes('invalid login credentials') || msg.includes('network');
+        if (!retryable || i === 3) break;
+        await new Promise((resolve) => setTimeout(resolve, 350));
     }
     return { ok: false, error: lastError || new Error('LOGIN GAGAL') };
 }
@@ -329,7 +345,7 @@ const userAuth = {
                     password: pass,
                     options: { data: { username: user } }
                 }),
-                AUTH_TIMEOUT_MS,
+                AUTH_SIGNUP_TIMEOUT_MS,
                 'AUTH REQUEST TIMEOUT'
             );
             if (error) {
@@ -340,7 +356,8 @@ const userAuth = {
                         await finalizeLoginStateFromSession(user);
                         setAuthFeedback('register', '> AKUN SUDAH ADA, LOGIN BERHASIL', false);
                     } else {
-                        setAuthFeedback('register', '> USERNAME SUDAH TERDAFTAR, TAPI PASSWORD TIDAK COCOK.', true);
+                        const mapped = mapAuthErrorMessage(directLogin.error);
+                        setAuthFeedback('register', mapped.includes('DATA SALAH') ? '> USERNAME SUDAH TERDAFTAR, TAPI PASSWORD TIDAK COCOK.' : mapped, true);
                     }
                     return;
                 }
@@ -368,14 +385,14 @@ const userAuth = {
             }
         } catch (err) {
             const errMsg = String(err?.message || 'KONEKSI GAGAL').toUpperCase();
-            if (errMsg.includes('AUTH REQUEST TIMEOUT') || errMsg.includes('REQUEST TIMEOUT') || errMsg.includes('TIMEOUT')) {
+            if (isAuthTimeoutError(err)) {
                 const auto = await fastAutoLoginAfterRegister(user, pass);
                 if (auto.ok) {
                     await finalizeLoginStateFromSession(user);
                     setAuthFeedback('register', '> DAFTAR & LOGIN BERHASIL', false);
                     return;
                 }
-                setAuthFeedback('register', '> SERVER LAMBAT. AKUN MUNGKIN SUDAH TERBUAT, COBA KLIK DAFTAR LAGI 1X UNTUK AUTO-LOGIN.', true);
+                setAuthFeedback('register', '> SERVER SEDANG LAMBAT. AKUN MUNGKIN SUDAH TERBUAT, COBA LOGIN SEKALI DENGAN USERNAME & PASSWORD YANG SAMA.', true);
                 return;
             }
             setAuthFeedback('register', `> ERROR: ${errMsg}`, true);
