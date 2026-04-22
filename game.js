@@ -166,6 +166,7 @@ function isRateLimited() {
 
 const userAuth = {
     register: async () => {
+        if (!supabaseClient) { setFeedback("> SUPABASE CLIENT TIDAK TERSEDIA", true); return; }
         if (isRateLimited()) { setFeedback("> TUNGGU SEBENTAR...", true); return; }
         const user = document.getElementById('reg-user').value.trim().toLowerCase();
         const pass = document.getElementById('reg-pass').value.trim();
@@ -174,26 +175,44 @@ const userAuth = {
         if (pass.length < 6) { setFeedback("> PASSWORD MIN 6 KARAKTER", true); return; }
         const regBtn = document.querySelector('#page-register .btn-primary');
         regBtn.disabled = true; regBtn.innerText = "PROSES...";
-        const { data: existing } = await supabaseClient.from('users').select('username').eq('username', user).maybeSingle();
-        if (existing) { setFeedback("> USERNAME SUDAH DIPAKAI", true); regBtn.disabled = false; regBtn.innerText = "BUAT AKUN"; return; }
-        const hashedPass = await hashPassword(pass);
-        const { error } = await supabaseClient.from('users').insert([{ username: user, password_hash: hashedPass }]);
-        if (error) { setFeedback(`> ERROR: ${error.message.toUpperCase()}`, true); regBtn.disabled = false; regBtn.innerText = "BUAT AKUN"; return; }
-        setFeedback("> DAFTAR BERHASIL! SILAKAN LOGIN", false);
-        setTimeout(() => showPage('page-login'), 1500);
+        try {
+            const { data: existing, error: existingErr } = await supabaseClient.from('users').select('username').eq('username', user).maybeSingle();
+            if (existingErr) { setFeedback(`> ERROR: ${existingErr.message.toUpperCase()}`, true); return; }
+            if (existing) { setFeedback("> USERNAME SUDAH DIPAKAI", true); return; }
+            const hashedPass = await hashPassword(pass);
+            const { error } = await supabaseClient.from('users').insert([{ username: user, password_hash: hashedPass }]);
+            if (error) { setFeedback(`> ERROR: ${error.message.toUpperCase()}`, true); return; }
+            setFeedback("> DAFTAR BERHASIL! SILAKAN LOGIN", false);
+            setTimeout(() => showPage('page-login'), 1500);
+        } catch (err) {
+            setFeedback(`> ERROR: ${(err?.message || 'KONEKSI GAGAL').toUpperCase()}`, true);
+        } finally {
+            regBtn.disabled = false;
+            regBtn.innerText = "BUAT AKUN";
+        }
     },
     login: async () => {
+        if (!supabaseClient) { setFeedback("> SUPABASE CLIENT TIDAK TERSEDIA", true); return; }
         if (isRateLimited()) { setFeedback("> TUNGGU SEBENTAR...", true); return; }
         const user = document.getElementById('login-user').value.trim().toLowerCase();
         const pass = document.getElementById('login-pass').value.trim();
+        if (!user || !pass) { setFeedback("> ISI USERNAME & PASSWORD", true); return; }
         const loginBtn = document.querySelector('#page-login .btn-primary');
         loginBtn.disabled = true; loginBtn.innerText = "VERIFIKASI...";
-        const hashedPass = await hashPassword(pass);
-        const { data, error } = await supabaseClient.from('users').select('username, password_hash').eq('username', user).eq('password_hash', hashedPass).single();
-        if (error || !data) { setFeedback("> DATA SALAH", true); triggerFlash('flash-red'); loginBtn.disabled = false; loginBtn.innerText = "LOGIN"; return; }
-        localStorage.setItem(SESSION_KEY, data.username);
-        gameState.currentUser = data.username;
-        userAuth.updateUI(); showPage('page-menu'); triggerGlobalGlitch(300, 'success');
+        try {
+            const hashedPass = await hashPassword(pass);
+            const { data, error } = await supabaseClient.from('users').select('username, password_hash').eq('username', user).eq('password_hash', hashedPass).single();
+            if (error || !data) { setFeedback("> DATA SALAH", true); triggerFlash('flash-red'); return; }
+            localStorage.setItem(SESSION_KEY, data.username);
+            gameState.currentUser = data.username;
+            userAuth.updateUI(); showPage('page-menu'); triggerGlobalGlitch(300, 'success');
+        } catch (err) {
+            setFeedback(`> ERROR: ${(err?.message || 'KONEKSI GAGAL').toUpperCase()}`, true);
+            triggerFlash('flash-red');
+        } finally {
+            loginBtn.disabled = false;
+            loginBtn.innerText = "LOGIN";
+        }
     },
     logout: () => {
         localStorage.removeItem(SESSION_KEY);
@@ -394,6 +413,7 @@ function playSFX(name) {
 }
 // ============================================================
 let presenceChannel = null;
+let realtimeConnected = false;
 
 function initPresence() {
     if (!supabaseClient) return;
@@ -410,10 +430,16 @@ function initPresence() {
         })
         .subscribe(async (status) => {
             if (status === 'SUBSCRIBED') {
+                realtimeConnected = true;
                 await presenceChannel.track({
                     user: gameState.currentUser || 'guest',
                     online_at: new Date().toISOString()
                 });
+            }
+            if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+                realtimeConnected = false;
+                const onlineCount = document.getElementById('online-count');
+                if (onlineCount) onlineCount.innerText = '-';
             }
         });
 }
