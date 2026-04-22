@@ -166,7 +166,8 @@ function clearDuelState() {
 // ============================================================
 // CUSTOM AUTH
 // ============================================================
-const AUTH_EMAIL_DOMAIN = 'guessit.local';
+const AUTH_EMAIL_DOMAIN = 'example.com';
+const LEGACY_AUTH_EMAIL_DOMAINS = ['guessit.local'];
 const USERNAME_REGEX = /^[a-z0-9_]{3,15}$/;
 const LAST_USERNAME_KEY = 'guess_it_last_username';
 const AUTH_TIMEOUT_MS = 15000;
@@ -185,6 +186,11 @@ function normalizeUsernameInput(raw) {
 
 function usernameToAuthEmail(username) {
     return `${username}@${AUTH_EMAIL_DOMAIN}`;
+}
+
+function usernameToAuthEmails(username) {
+    const unique = new Set([AUTH_EMAIL_DOMAIN, ...LEGACY_AUTH_EMAIL_DOMAINS]);
+    return Array.from(unique).map((domain) => `${username}@${domain}`);
 }
 
 function emailToUsername(email) {
@@ -295,13 +301,25 @@ const userAuth = {
         if (!loginBtn) { setFeedback("> TOMBOL LOGIN TIDAK DITEMUKAN", true); return; }
         loginBtn.disabled = true; loginBtn.innerText = "VERIFIKASI...";
         try {
-            const email = usernameToAuthEmail(user);
-            const { error } = await withTimeout(
-                supabaseClient.auth.signInWithPassword({ email, password: pass }),
-                AUTH_TIMEOUT_MS,
-                'AUTH REQUEST TIMEOUT'
-            );
-            if (error) { setFeedback(mapAuthErrorMessage(error), true); triggerFlash('flash-red'); return; }
+            const emails = usernameToAuthEmails(user);
+            let signedIn = false;
+            let lastError = null;
+            for (const email of emails) {
+                const { error } = await withTimeout(
+                    supabaseClient.auth.signInWithPassword({ email, password: pass }),
+                    AUTH_TIMEOUT_MS,
+                    'AUTH REQUEST TIMEOUT'
+                );
+                if (!error) { signedIn = true; break; }
+                lastError = error;
+                const msg = String(error.message || '').toLowerCase();
+                if (!msg.includes('invalid login credentials')) break;
+            }
+            if (!signedIn) {
+                setFeedback(mapAuthErrorMessage(lastError || new Error('LOGIN GAGAL')), true);
+                triggerFlash('flash-red');
+                return;
+            }
 
             const resolved = await getUsernameFromActiveSession();
             gameState.currentUser = resolved || user;
