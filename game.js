@@ -170,9 +170,9 @@ const AUTH_EMAIL_DOMAIN = 'example.com';
 const LEGACY_AUTH_EMAIL_DOMAINS = ['guessit.local'];
 const USERNAME_REGEX = /^[a-z0-9_]{3,15}$/;
 const LAST_USERNAME_KEY = 'guess_it_last_username';
-const AUTH_TIMEOUT_MS = 30000;
-const POST_SIGNUP_LOGIN_RETRIES = 6;
-const POST_SIGNUP_LOGIN_DELAY_MS = 1500;
+const AUTH_TIMEOUT_MS = 12000;
+const POST_SIGNUP_LOGIN_ATTEMPTS = 2;
+const POST_SIGNUP_LOGIN_DELAY_MS = 900;
 
 let lastAuthAttempt = 0;
 function isRateLimited() {
@@ -260,22 +260,22 @@ async function finalizeLoginStateFromSession(fallbackUsername) {
     triggerGlobalGlitch(300, 'success');
 }
 
-async function tryAutoLoginAfterSignup(username, password, sourceLabel = 'SIGNUP') {
-    for (let i = 0; i < POST_SIGNUP_LOGIN_RETRIES; i++) {
+async function tryPostSignupAutoLogin(username, password, sourceLabel = 'SIGNUP') {
+    let lastError = null;
+    for (let i = 0; i < POST_SIGNUP_LOGIN_ATTEMPTS; i++) {
         const result = await signInByUsernameAndPassword(username, password);
         if (result.ok) {
             await finalizeLoginStateFromSession(username);
             setAuthFeedback('register', `> DAFTAR & LOGIN BERHASIL (${sourceLabel})`, false);
-            return true;
+            return { ok: true, error: null };
         }
-        if (i < POST_SIGNUP_LOGIN_RETRIES - 1) {
-            setAuthFeedback('register', `> MENUNGGU KONFIRMASI SERVER... (${i + 1}/${POST_SIGNUP_LOGIN_RETRIES})`, false);
+        lastError = result.error;
+        if (i < POST_SIGNUP_LOGIN_ATTEMPTS - 1) {
+            setAuthFeedback('register', `> MENYIAPKAN LOGIN... (${i + 1}/${POST_SIGNUP_LOGIN_ATTEMPTS})`, false);
             await delay(POST_SIGNUP_LOGIN_DELAY_MS);
-        } else {
-            setAuthFeedback('register', `> DAFTAR BERHASIL, TAPI AUTO-LOGIN GAGAL: ${mapAuthErrorMessage(result.error)}`, true);
         }
     }
-    return false;
+    return { ok: false, error: lastError || new Error('LOGIN GAGAL') };
 }
 
 function withTimeout(promise, timeoutMs, timeoutLabel = 'REQUEST TIMEOUT') {
@@ -354,8 +354,14 @@ const userAuth = {
                 setAuthFeedback('register', '> DAFTAR BERHASIL', false);
             } else {
                 lastAuthAttempt = 0;
-                const ok = await tryAutoLoginAfterSignup(user, pass, 'NO_SESSION');
-                if (!ok) {
+                const auto = await tryPostSignupAutoLogin(user, pass, 'NO_SESSION');
+                if (!auto.ok) {
+                    const lower = String(auto.error?.message || '').toLowerCase();
+                    if (lower.includes('email not confirmed')) {
+                        setAuthFeedback('register', '> DAFTAR BERHASIL. CEK EMAIL VERIFIKASI ATAU NONAKTIFKAN EMAIL CONFIRMATION DI SUPABASE AUTH.', true);
+                    } else {
+                        setAuthFeedback('register', '> DAFTAR BERHASIL. SILAKAN LOGIN MANUAL.', false);
+                    }
                     setTimeout(() => showPage('page-login'), 1200);
                 }
             }
@@ -363,10 +369,13 @@ const userAuth = {
             const errMsg = String(err?.message || 'KONEKSI GAGAL').toUpperCase();
             if (errMsg.includes('AUTH REQUEST TIMEOUT') || errMsg.includes('REQUEST TIMEOUT') || errMsg.includes('TIMEOUT')) {
                 lastAuthAttempt = 0;
-                const ok = await tryAutoLoginAfterSignup(user, pass, 'TIMEOUT');
-                if (ok) {
+                const auto = await tryPostSignupAutoLogin(user, pass, 'TIMEOUT');
+                if (auto.ok) {
                     return;
                 }
+                setAuthFeedback('register', '> DAFTAR KEMUNGKINAN BERHASIL, TAPI KONFIRMASI LAMBAT. COBA LOGIN MANUAL.', true);
+                setTimeout(() => showPage('page-login'), 1200);
+                return;
             }
             setAuthFeedback('register', `> ERROR: ${errMsg}`, true);
         } finally {
