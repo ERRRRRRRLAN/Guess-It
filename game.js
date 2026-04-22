@@ -211,6 +211,14 @@ function mapAuthErrorMessage(error) {
     return `> ERROR AUTH: ${String(error.message).toUpperCase()}`;
 }
 
+function setAuthFeedback(scope, msg, isError = true) {
+    const id = scope === 'register' ? 'auth-feedback-register' : 'auth-feedback-login';
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = msg || '';
+    el.style.color = isError ? 'var(--accent-red)' : 'var(--neon-cyan)';
+}
+
 function withTimeout(promise, timeoutMs, timeoutLabel = 'REQUEST TIMEOUT') {
     let timer = null;
     const timeoutPromise = new Promise((_, reject) => {
@@ -247,14 +255,15 @@ async function getUsernameFromActiveSession() {
 const userAuth = {
     register: async () => {
         if (!supabaseClient) { setFeedback("> SUPABASE CLIENT TIDAK TERSEDIA", true); return; }
+        setAuthFeedback('register', '');
         if (isRateLimited()) { setFeedback("> TUNGGU SEBENTAR...", true); return; }
         const user = normalizeUsernameInput(document.getElementById('reg-user').value);
         const pass = document.getElementById('reg-pass').value.trim();
-        if (!user || !pass) { setFeedback("> ISI SEMUA DATA", true); return; }
-        if (!USERNAME_REGEX.test(user)) { setFeedback("> USERNAME: 3-15 (a-z, 0-9, _)", true); return; }
-        if (pass.length < 6) { setFeedback("> PASSWORD MIN 6 KARAKTER", true); return; }
+        if (!user || !pass) { setAuthFeedback('register', '> ISI SEMUA DATA', true); return; }
+        if (!USERNAME_REGEX.test(user)) { setAuthFeedback('register', '> USERNAME: 3-15 (a-z, 0-9, _)', true); return; }
+        if (pass.length < 6) { setAuthFeedback('register', '> PASSWORD MIN 6 KARAKTER', true); return; }
         const regBtn = document.querySelector('#page-register .btn-primary');
-        if (!regBtn) { setFeedback("> TOMBOL REGISTER TIDAK DITEMUKAN", true); return; }
+        if (!regBtn) { setAuthFeedback('register', '> TOMBOL REGISTER TIDAK DITEMUKAN', true); return; }
         regBtn.disabled = true; regBtn.innerText = "PROSES...";
         try {
             const email = usernameToAuthEmail(user);
@@ -267,7 +276,16 @@ const userAuth = {
                 AUTH_TIMEOUT_MS,
                 'AUTH REQUEST TIMEOUT'
             );
-            if (error) { setFeedback(mapAuthErrorMessage(error), true); return; }
+            if (error) {
+                const errMsg = mapAuthErrorMessage(error);
+                setAuthFeedback('register', errMsg, true);
+                const lower = String(error.message || '').toLowerCase();
+                if (lower.includes('already registered') || lower.includes('already been registered')) {
+                    lastAuthAttempt = 0;
+                    await userAuth.login();
+                }
+                return;
+            }
 
             // Profile row is created by DB trigger (handle_new_user_profile).
             // Avoid blocking register flow with extra client upsert.
@@ -278,13 +296,13 @@ const userAuth = {
                 userAuth.updateUI();
                 showPage('page-menu');
                 triggerGlobalGlitch(300, 'success');
-                setFeedback("> DAFTAR BERHASIL", false);
+                setAuthFeedback('register', '> DAFTAR BERHASIL', false);
             } else {
-                setFeedback("> DAFTAR BERHASIL! JIKA LOGIN GAGAL, NONAKTIFKAN EMAIL CONFIRMATION DI SUPABASE AUTH", true);
+                setAuthFeedback('register', '> DAFTAR BERHASIL! LANJUT LOGIN', false);
                 setTimeout(() => showPage('page-login'), 1200);
             }
         } catch (err) {
-            setFeedback(`> ERROR: ${(err?.message || 'KONEKSI GAGAL').toUpperCase()}`, true);
+            setAuthFeedback('register', `> ERROR: ${(err?.message || 'KONEKSI GAGAL').toUpperCase()}`, true);
         } finally {
             regBtn.disabled = false;
             regBtn.innerText = "BUAT AKUN";
@@ -292,13 +310,14 @@ const userAuth = {
     },
     login: async () => {
         if (!supabaseClient) { setFeedback("> SUPABASE CLIENT TIDAK TERSEDIA", true); return; }
+        setAuthFeedback('login', '');
         if (isRateLimited()) { setFeedback("> TUNGGU SEBENTAR...", true); return; }
         const user = normalizeUsernameInput(document.getElementById('login-user').value);
         const pass = document.getElementById('login-pass').value.trim();
-        if (!user || !pass) { setFeedback("> ISI USERNAME & PASSWORD", true); return; }
-        if (!USERNAME_REGEX.test(user)) { setFeedback("> FORMAT USERNAME TIDAK VALID", true); return; }
+        if (!user || !pass) { setAuthFeedback('login', '> ISI USERNAME & PASSWORD', true); return; }
+        if (!USERNAME_REGEX.test(user)) { setAuthFeedback('login', '> FORMAT USERNAME TIDAK VALID', true); return; }
         const loginBtn = document.querySelector('#page-login .btn-primary');
-        if (!loginBtn) { setFeedback("> TOMBOL LOGIN TIDAK DITEMUKAN", true); return; }
+        if (!loginBtn) { setAuthFeedback('login', '> TOMBOL LOGIN TIDAK DITEMUKAN', true); return; }
         loginBtn.disabled = true; loginBtn.innerText = "VERIFIKASI...";
         try {
             const emails = usernameToAuthEmails(user);
@@ -316,7 +335,7 @@ const userAuth = {
                 if (!msg.includes('invalid login credentials')) break;
             }
             if (!signedIn) {
-                setFeedback(mapAuthErrorMessage(lastError || new Error('LOGIN GAGAL')), true);
+                setAuthFeedback('login', mapAuthErrorMessage(lastError || new Error('LOGIN GAGAL')), true);
                 triggerFlash('flash-red');
                 return;
             }
@@ -324,9 +343,10 @@ const userAuth = {
             const resolved = await getUsernameFromActiveSession();
             gameState.currentUser = resolved || user;
             if (gameState.currentUser) localStorage.setItem(LAST_USERNAME_KEY, gameState.currentUser);
+            setAuthFeedback('login', '> LOGIN BERHASIL', false);
             userAuth.updateUI(); showPage('page-menu'); triggerGlobalGlitch(300, 'success');
         } catch (err) {
-            setFeedback(`> ERROR: ${(err?.message || 'KONEKSI GAGAL').toUpperCase()}`, true);
+            setAuthFeedback('login', `> ERROR: ${(err?.message || 'KONEKSI GAGAL').toUpperCase()}`, true);
             triggerFlash('flash-red');
         } finally {
             loginBtn.disabled = false;

@@ -784,6 +784,15 @@ input:focus, #player-name:focus {
     box-shadow: 0 0 15px rgba(0, 242, 255, 0.2);
 }
 
+.auth-feedback {
+    min-height: 1rem;
+    font-family: var(--font-data);
+    font-size: 0.62rem;
+    letter-spacing: 0.8px;
+    text-align: left;
+    margin-top: -0.2rem;
+}
+
 .auth-toggle {
     font-size: 0.8rem;
     color: var(--text-dim);

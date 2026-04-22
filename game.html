@@ -68,6 +68,7 @@
             <div class="auth-form">
                 <input type="text" id="login-user" placeholder="USERNAME" maxlength="15">
                 <input type="password" id="login-pass" placeholder="PASSWORD">
+                <div id="auth-feedback-login" class="auth-feedback"></div>
                 <button class="btn btn-primary" onclick="userAuth.login()">MASUK</button>
                 <p class="auth-toggle">Belum punya akun? <span onclick="showPage('page-register')">Daftar</span></p>
             </div>
@@ -80,6 +81,7 @@
             <div class="auth-form">
                 <input type="text" id="reg-user" placeholder="USERNAME" maxlength="15">
                 <input type="password" id="reg-pass" placeholder="PASSWORD">
+                <div id="auth-feedback-register" class="auth-feedback"></div>
                 <button class="btn btn-primary" onclick="userAuth.register()">BUAT AKUN</button>
                 <p class="auth-toggle">Sudah punya akun? <span onclick="showPage('page-login')">Login</span></p>
             </div>
