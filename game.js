@@ -169,6 +169,7 @@ function clearDuelState() {
 const AUTH_EMAIL_DOMAIN = 'guessit.local';
 const USERNAME_REGEX = /^[a-z0-9_]{3,15}$/;
 const LAST_USERNAME_KEY = 'guess_it_last_username';
+const AUTH_TIMEOUT_MS = 15000;
 
 let lastAuthAttempt = 0;
 function isRateLimited() {
@@ -204,6 +205,16 @@ function mapAuthErrorMessage(error) {
     return `> ERROR AUTH: ${String(error.message).toUpperCase()}`;
 }
 
+function withTimeout(promise, timeoutMs, timeoutLabel = 'REQUEST TIMEOUT') {
+    let timer = null;
+    const timeoutPromise = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(timeoutLabel)), timeoutMs);
+    });
+    return Promise.race([promise, timeoutPromise]).finally(() => {
+        if (timer) clearTimeout(timer);
+    });
+}
+
 async function getUsernameFromActiveSession() {
     if (!supabaseClient) return null;
     const { data: { session } } = await supabaseClient.auth.getSession();
@@ -237,22 +248,23 @@ const userAuth = {
         if (!USERNAME_REGEX.test(user)) { setFeedback("> USERNAME: 3-15 (a-z, 0-9, _)", true); return; }
         if (pass.length < 6) { setFeedback("> PASSWORD MIN 6 KARAKTER", true); return; }
         const regBtn = document.querySelector('#page-register .btn-primary');
+        if (!regBtn) { setFeedback("> TOMBOL REGISTER TIDAK DITEMUKAN", true); return; }
         regBtn.disabled = true; regBtn.innerText = "PROSES...";
         try {
             const email = usernameToAuthEmail(user);
-            const { data, error } = await supabaseClient.auth.signUp({
-                email,
-                password: pass,
-                options: { data: { username: user } }
-            });
+            const { data, error } = await withTimeout(
+                supabaseClient.auth.signUp({
+                    email,
+                    password: pass,
+                    options: { data: { username: user } }
+                }),
+                AUTH_TIMEOUT_MS,
+                'AUTH REQUEST TIMEOUT'
+            );
             if (error) { setFeedback(mapAuthErrorMessage(error), true); return; }
 
-            if (data?.user?.id) {
-                await supabaseClient.from('profiles').upsert(
-                    { id: data.user.id, username: user },
-                    { onConflict: 'id' }
-                );
-            }
+            // Profile row is created by DB trigger (handle_new_user_profile).
+            // Avoid blocking register flow with extra client upsert.
 
             if (data?.session) {
                 gameState.currentUser = user;
@@ -280,10 +292,15 @@ const userAuth = {
         if (!user || !pass) { setFeedback("> ISI USERNAME & PASSWORD", true); return; }
         if (!USERNAME_REGEX.test(user)) { setFeedback("> FORMAT USERNAME TIDAK VALID", true); return; }
         const loginBtn = document.querySelector('#page-login .btn-primary');
+        if (!loginBtn) { setFeedback("> TOMBOL LOGIN TIDAK DITEMUKAN", true); return; }
         loginBtn.disabled = true; loginBtn.innerText = "VERIFIKASI...";
         try {
             const email = usernameToAuthEmail(user);
-            const { error } = await supabaseClient.auth.signInWithPassword({ email, password: pass });
+            const { error } = await withTimeout(
+                supabaseClient.auth.signInWithPassword({ email, password: pass }),
+                AUTH_TIMEOUT_MS,
+                'AUTH REQUEST TIMEOUT'
+            );
             if (error) { setFeedback(mapAuthErrorMessage(error), true); triggerFlash('flash-red'); return; }
 
             const resolved = await getUsernameFromActiveSession();
