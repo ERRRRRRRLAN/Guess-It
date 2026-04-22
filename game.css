@@ -728,7 +728,7 @@ input:focus, #player-name:focus {
 
 /* User Profile */
 .user-profile {
-    display: none; /* Shown via JS */
+    display: flex; /* Safe default guest view */
     flex-direction: row;
     align-items: center;
     justify-content: space-between;

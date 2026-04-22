@@ -408,6 +408,10 @@ async function tryResumeDuelFromStorage() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Render safe guest state immediately so menu never looks "empty".
+    gameState.currentUser = null;
+    userAuth.updateUI();
+
     userAuth.checkSession().catch(() => {
         gameState.currentUser = null;
         userAuth.updateUI();
