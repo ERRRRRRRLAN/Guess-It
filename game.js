@@ -1314,6 +1314,10 @@ function startOpponentOfflineCountdown() {
 }
 
 function joinDuelRoom(room, restoreSnapshot = null) {
+    if (document.getElementById('duel-arena').style.display === 'block') {
+        if (duel && duel.room && duel.room.id === room.id) return;
+    }
+
     const config = difficulties[room.difficulty];
     const isP1 = room.player1 === gameState.currentUser;
     const restore = restoreSnapshot && restoreSnapshot.roomId === room.id ? restoreSnapshot : null;
@@ -1476,11 +1480,23 @@ function joinDuelRoom(room, restoreSnapshot = null) {
             }
         })
         .on('broadcast', { event: 'guess' }, (payload) => {
+            // Fallback: Jika menerima pesan broadcast dari lawan, berarti dia ONLINE
+            if (duel.oppConnection !== 'online') {
+                clearOpponentOfflineCountdown();
+                duel.oppConnection = 'online';
+                setOpponentConnectionUI('online');
+            }
             handleOpponentBroadcast(payload.payload);
         })
-        .subscribe(async (status) => {
+        .subscribe(async (status, err) => {
+            console.log('[REALTIME] Status Subscription:', status, err || '');
             if (status === 'SUBSCRIBED') {
-                await duel.channel.track({ user: gameState.currentUser, online_at: new Date().toISOString() });
+                try {
+                    await duel.channel.track({ user: gameState.currentUser, online_at: new Date().toISOString() });
+                    console.log('[REALTIME] Presence tracked untuk:', gameState.currentUser);
+                } catch (e) {
+                    console.error('[REALTIME] Gagal track presence:', e);
+                }
             }
         });
 
