@@ -1907,12 +1907,9 @@ function showDuelResult(isForfeit = false) {
         oppTotalDP += MATCH_WINNER_BONUS;
     }
 
-    // Save final status to Supabase room
+    // Hapus room dari Supabase agar tidak menjadi ghost room
     if (duel.room) {
-        supabaseClient.from('duel_rooms').update({ 
-            status: 'finished', 
-            winner: matchWinner 
-        }).eq('id', duel.room.id).then(() => {});
+        supabaseClient.from('duel_rooms').delete().eq('id', duel.room.id).then(() => {});
     }
 
     // Save Score to Leaderboard
@@ -2098,6 +2095,11 @@ async function exitDuel() {
                 payload: { sender: gameState.currentUser, forfeit: true }
             });
         }
+    }
+
+    // Hapus room dari database jika kita adalah salah satu pesertanya
+    if (duel.room) {
+        supabaseClient.from('duel_rooms').delete().eq('id', duel.room.id).then(() => {});
     }
 
     stopTimer(duel.timer);
