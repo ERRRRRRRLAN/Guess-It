@@ -29,7 +29,21 @@ const GameEngine = (() => {
             if (guess === _duelTarget) return 0;
             return guess < _duelTarget ? -1 : 1;
         },
-        getDuelTarget: () => _duelTarget
+        getDuelTarget: () => _duelTarget,
+        saveDuelScore: async (difficulty, attempts, name, points, timeSec) => {
+            if (!supabaseClient || !name) return;
+            try {
+                await supabaseClient.rpc('submit_score_secure', {
+                    p_mode: 'duel',
+                    p_difficulty: difficulty,
+                    p_attempts: attempts,
+                    p_points: points,
+                    p_time_seconds: timeSec
+                });
+            } catch (e) {
+                console.error('Score save error:', e);
+            }
+        }
     };
 })();
 
@@ -1928,10 +1942,9 @@ function showDuelResult(isForfeit = false) {
         supabaseClient.from('duel_rooms').delete().eq('id', duel.room.id).then(() => {});
     }
 
-    // Save Score to Leaderboard
+    // Save Score to Leaderboard (hanya untuk duel yang belum fully server-authoritative)
     if (gameState.currentUser) {
-        // We use the last difficulty played
-        saveScore(duel.difficulty, duel.history.length, gameState.currentUser, 'duel', myTotalDP, Math.round(duel.timeSec));
+        GameEngine.saveDuelScore(duel.difficulty, duel.history.length, gameState.currentUser, myTotalDP, Math.round(duel.timeSec));
     }
 
     const myName = escapeHtml((gameState.currentUser || '').toUpperCase());
@@ -2132,101 +2145,9 @@ async function exitDuel() {
 }
 
 // ============================================================
-// SCORE SAVING
+// SCORE API
 // ============================================================
-const SCORE_RPC_SAVE = 'submit_score_secure';
 const SCORE_RPC_POINTS = 'get_my_points_secure';
-const ALLOW_LEGACY_SCORE_FALLBACK = true;
-
-function isMissingRpcError(error) {
-    const msg = String(error?.message || '').toLowerCase();
-    return msg.includes('does not exist') || msg.includes('could not find the function');
-}
-
-async function saveScore(difficulty, attempts, name, mode, points, timeSec) {
-    if (!supabaseClient) { console.error('[SAVE] No supabase client'); return; }
-    if (!gameState.currentUser || name !== gameState.currentUser) {
-        console.warn('[SAVE] blocked: invalid user context');
-        return;
-    }
-    const m = mode === 'duel' ? 'duel' : 'solo';
-    const p = clampInt(points, 0, 5000, 0);
-    const safeAttempts = clampInt(attempts, 1, 999, 1);
-    const safeTimeSec = clampInt(timeSec, 0, 36000, 0);
-
-    const { error: rpcErr } = await supabaseClient.rpc(SCORE_RPC_SAVE, {
-        p_mode: m,
-        p_difficulty: difficulty,
-        p_attempts: safeAttempts,
-        p_points: p,
-        p_time_seconds: safeTimeSec,
-        p_username: name
-    });
-    if (!rpcErr) {
-        loadUserPoints();
-        return;
-    }
-
-    if (!ALLOW_LEGACY_SCORE_FALLBACK) {
-        console.error('[SAVE] secure RPC failed:', rpcErr);
-        return;
-    }
-    console.warn('[SAVE] secure RPC unavailable, using legacy fallback (debug only):', rpcErr?.message || rpcErr);
-
-    // Legacy fallback: keeps local dev usable before SQL migration is applied.
-    const { data: rows, error: selErr } = await supabaseClient
-        .from('scores')
-        .select('id, points')
-        .eq('username', name)
-        .eq('mode', m);
-
-    console.log('[SAVE] existing rows:', rows, selErr);
-
-    let totalPoints = p;
-
-    if (rows && rows.length > 0) {
-        // Sum up all existing points (in case of duplicates)
-        const existingTotal = rows.reduce((sum, r) => sum + (r.points || 0), 0);
-        totalPoints = clampInt(existingTotal + p, 0, 100000000, p);
-        console.log(`[SAVE] existing total=${existingTotal}, new total=${totalPoints}`);
-
-        // Delete ALL old rows for this user+mode in one batch
-        const ids = rows.map(r => r.id);
-        const { error: delErr } = await supabaseClient.from('scores').delete().in('id', ids);
-        if (delErr) console.error('[SAVE] delete error:', delErr);
-        else console.log(`[SAVE] deleted ${ids.length} old rows`);
-    }
-
-    // 2. Insert fresh row with accumulated total
-    const { data: inserted, error: insErr } = await supabaseClient
-        .from('scores')
-        .insert([{
-            username: name, difficulty: difficulty, attempts: safeAttempts,
-            mode: m, points: totalPoints, time_seconds: safeTimeSec
-        }])
-        .select();
-
-    console.log('[SAVE] inserted:', inserted, insErr);
-
-    // Auto-refresh SP/DP display
-    loadUserPoints();
-}
-
-// Utility: clear all scores (run in browser console: clearAllScores())
-async function clearAllScores() {
-    if (!DEBUG_MODE) {
-        console.warn('[DEBUG] clearAllScores is disabled outside localhost');
-        return;
-    }
-    if (!supabaseClient) return;
-    const { data } = await supabaseClient.from('scores').select('id');
-    if (data) {
-        for (const row of data) {
-            await supabaseClient.from('scores').delete().eq('id', row.id);
-        }
-    }
-    console.log("All scores cleared!");
-}
 
 async function loadUserPoints() {
     if (!supabaseClient || !gameState.currentUser) return;
@@ -2271,8 +2192,9 @@ function formatNumber(n) {
 
 // Abbreviated for leaderboard (10.6K)
 function formatPointsShort(n) {
-    if (n > 9999) return (n / 1000).toFixed(1).replace('.', ',') + 'K';
-    return formatNumber(n);
+    if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+    if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+    return n.toString();
 }
 
 async function handleSaveScore(timeSec, points) {
@@ -2280,7 +2202,9 @@ async function handleSaveScore(timeSec, points) {
     const name = gameState.currentUser || '';
     if (!name) return;
     if (saveBtn) { saveBtn.disabled = true; saveBtn.innerText = "MENYIMPAN..."; }
-    await saveScore(gameState.difficulty, gameState.history.length, name, 'solo', points, timeSec);
+    
+    await GameEngine.saveScore(gameState.difficulty, gameState.history.length, name, 'solo', points, timeSec);
+    
     if (saveBtn) saveBtn.innerText = "TERSIMPAN!";
     triggerGlobalGlitch(300, 'success');
 }
