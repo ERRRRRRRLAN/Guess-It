@@ -739,6 +739,15 @@ window.onpopstate = (e) => {
     const target = e.state ? e.state.pageId : 'page-menu';
     playSFX('pageBack');
     cleanupActiveGame();
+    
+    // Cancel matchmaking if navigating away
+    if (typeof matchmakingQueueId !== 'undefined' && (matchmakingQueueId || typeof matchmakingChannel !== 'undefined' || typeof matchmakingPollInterval !== 'undefined')) {
+        if (gameState.currentUser && supabaseClient) {
+            supabaseClient.from('matchmaking_queue').delete().eq('username', gameState.currentUser).eq('status', 'waiting').then();
+        }
+        if (typeof cleanupMatchmaking === 'function') cleanupMatchmaking();
+    }
+    
     showPage(target, true);
 };
 
@@ -1118,7 +1127,8 @@ async function cancelMatchmaking() {
     }
     cleanupMatchmaking();
     setMode('duel');
-    showPage('page-difficulty');
+    history.replaceState({ pageId: 'page-difficulty' }, '', '#page-difficulty');
+    showPage('page-difficulty', true);
 }
 
 function cleanupMatchmaking() {
