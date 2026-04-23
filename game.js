@@ -179,6 +179,9 @@ const USERNAME_REGEX = /^[a-z0-9_]{3,15}$/;
 const LAST_USERNAME_KEY = 'guess_it_last_username';
 const AUTH_SIGNUP_TIMEOUT_MS = 8000;
 const AUTH_LOGIN_TIMEOUT_MS = 6000;
+const REGISTER_LOGIN_RETRY_MS = [250, 500, 900];
+
+let lastRegisteredCredentials = null;
 
 let lastAuthAttempt = 0;
 function isRateLimited() {
@@ -405,6 +408,11 @@ const userAuth = {
             const loginPass = document.getElementById('login-pass');
             if (loginUser) loginUser.value = user;
             if (loginPass) loginPass.value = pass;
+            lastRegisteredCredentials = {
+                username: user,
+                password: pass,
+                ts: Date.now()
+            };
 
             setAuthFeedback('register', '> DAFTAR BERHASIL. MENGARAHKAN KE LOGIN...', false);
             showPage('page-login');
@@ -430,13 +438,32 @@ const userAuth = {
         if (!loginBtn) { setAuthFeedback('login', '> TOMBOL LOGIN TIDAK DITEMUKAN', true); return; }
         loginBtn.disabled = true; loginBtn.innerText = "VERIFIKASI...";
         try {
-            const signInResult = await signInByUsernameAndPassword(user, pass);
+            let signInResult = await signInByUsernameAndPassword(user, pass);
+            let msg = String(signInResult.error?.message || '').toLowerCase();
+            const canRetryAfterRegister =
+                !signInResult.ok &&
+                msg.includes('invalid login credentials') &&
+                lastRegisteredCredentials &&
+                (Date.now() - lastRegisteredCredentials.ts) < 120000 &&
+                lastRegisteredCredentials.username === user &&
+                lastRegisteredCredentials.password === pass;
+
+            if (canRetryAfterRegister) {
+                for (const delayMs of REGISTER_LOGIN_RETRY_MS) {
+                    setAuthFeedback('login', '> MENUNGGU SINKRONISASI AKUN...', false);
+                    await wait(delayMs);
+                    signInResult = await signInByUsernameAndPassword(user, pass);
+                    if (signInResult.ok) break;
+                }
+            }
+
             if (!signInResult.ok) {
                 setAuthFeedback('login', mapAuthErrorMessage(signInResult.error), true);
                 triggerFlash('flash-red');
                 return;
             }
 
+            lastRegisteredCredentials = null;
             setAuthFeedback('login', '> LOGIN BERHASIL', false);
             await finalizeLoginStateFromSession(user);
         } catch (err) {
