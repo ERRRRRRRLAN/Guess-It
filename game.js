@@ -285,11 +285,16 @@ async function finalizeLoginStateFromSession(fallbackUsername) {
     triggerGlobalGlitch(300, 'success');
 
     try {
-        const resolved = await getUsernameFromActiveSession();
-        if (resolved && resolved !== gameState.currentUser) {
-            gameState.currentUser = resolved;
-            localStorage.setItem(LAST_USERNAME_KEY, resolved);
-            userAuth.updateUI();
+        if (supabaseClient) {
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            if (session?.user) {
+                const resolved = normalizeUsernameInput(session.user.user_metadata?.username || emailToUsername(session.user.email));
+                if (resolved && resolved !== gameState.currentUser) {
+                    gameState.currentUser = resolved;
+                    localStorage.setItem(LAST_USERNAME_KEY, resolved);
+                    userAuth.updateUI();
+                }
+            }
         }
     } catch (_) {}
 }
@@ -342,26 +347,31 @@ const userAuth = {
         regBtn.disabled = true; regBtn.innerText = "PROSES...";
         try {
             setAuthFeedback('register', '> MEMBUAT AKUN...', false);
-            try {
-                await apiRequest('/api/auth/register', 'POST', { username: user, password: pass }, AUTH_SIGNUP_TIMEOUT_MS);
-            } catch (error) {
-                const lower = String(error?.message || '').toLowerCase();
-                if (lower.includes('already')) {
+            
+            const email = usernameToAuthEmail(user);
+            const { data, error } = await supabaseClient.auth.signUp({
+                email,
+                password: pass,
+                options: {
+                    data: { username: user }
+                }
+            });
+
+            if (error) {
+                const lower = String(error.message).toLowerCase();
+                if (lower.includes('already registered')) {
                     setAuthFeedback('register', '> USERNAME SUDAH TERDAFTAR. SILAKAN LOGIN.', true);
                     return;
                 }
                 setAuthFeedback('register', mapAuthErrorMessage(error), true);
                 return;
             }
+
             const loginUser = document.getElementById('login-user');
             const loginPass = document.getElementById('login-pass');
             if (loginUser) loginUser.value = user;
             if (loginPass) loginPass.value = pass;
-            lastRegisteredCredentials = {
-                username: user,
-                password: pass,
-                ts: Date.now()
-            };
+            lastRegisteredCredentials = { username: user, password: pass, ts: Date.now() };
 
             setAuthFeedback('register', '> DAFTAR BERHASIL. MENGARAHKAN KE LOGIN...', false);
             showPage('page-login');
@@ -369,7 +379,7 @@ const userAuth = {
             loginPass?.focus();
         } catch (err) {
             const errMsg = String(err?.message || 'KONEKSI GAGAL').toUpperCase();
-            setAuthFeedback('register', isAuthTimeoutError(err) ? '> SERVER AUTH LAMBAT, COBA DAFTAR LAGI.' : `> ERROR: ${errMsg}`, true);
+            setAuthFeedback('register', `> ERROR: ${errMsg}`, true);
         } finally {
             regBtn.disabled = false;
             regBtn.innerText = "BUAT AKUN";
@@ -387,27 +397,24 @@ const userAuth = {
         if (!loginBtn) { setAuthFeedback('login', '> TOMBOL LOGIN TIDAK DITEMUKAN', true); return; }
         loginBtn.disabled = true; loginBtn.innerText = "VERIFIKASI...";
         try {
-            let signInResult = await signInByUsernameAndPassword(user, pass);
-            let msg = String(signInResult.error?.message || '').toLowerCase();
-            const canRetryAfterRegister =
-                !signInResult.ok &&
-                msg.includes('invalid login credentials') &&
-                lastRegisteredCredentials &&
-                (Date.now() - lastRegisteredCredentials.ts) < 120000 &&
-                lastRegisteredCredentials.username === user &&
-                lastRegisteredCredentials.password === pass;
-
-            if (canRetryAfterRegister) {
-                for (const delayMs of REGISTER_LOGIN_RETRY_MS) {
-                    setAuthFeedback('login', '> MENUNGGU SINKRONISASI AKUN...', false);
-                    await wait(delayMs);
-                    signInResult = await signInByUsernameAndPassword(user, pass);
-                    if (signInResult.ok) break;
+            let error = null;
+            let success = false;
+            
+            const emails = usernameToAuthEmails(user);
+            for (const email of emails) {
+                const { error: signInErr } = await supabaseClient.auth.signInWithPassword({
+                    email,
+                    password: pass
+                });
+                if (!signInErr) {
+                    success = true;
+                    break;
                 }
+                error = signInErr;
             }
 
-            if (!signInResult.ok) {
-                setAuthFeedback('login', mapAuthErrorMessage(signInResult.error), true);
+            if (!success) {
+                setAuthFeedback('login', mapAuthErrorMessage(error), true);
                 triggerFlash('flash-red');
                 return;
             }
@@ -425,7 +432,9 @@ const userAuth = {
     },
     logout: async () => {
         try {
-            await apiRequest('/api/auth/logout', 'POST', {}, AUTH_LOGIN_TIMEOUT_MS);
+            if (supabaseClient) {
+                await supabaseClient.auth.signOut();
+            }
         } catch (err) {
             console.warn('[AUTH] signOut failed, forcing local logout:', err?.message || err);
         } finally {
@@ -440,11 +449,18 @@ const userAuth = {
     },
     checkSession: async () => {
         if (!supabaseClient) { gameState.currentUser = null; userAuth.updateUI(); return; }
-        const resolvedAfterRefresh = await resolveAuthUsernameWithRetry(4, 250);
-        if (resolvedAfterRefresh) {
-            gameState.currentUser = resolvedAfterRefresh;
-            localStorage.setItem(LAST_USERNAME_KEY, resolvedAfterRefresh);
-        } else {
+        try {
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            if (session?.user) {
+                const resolved = normalizeUsernameInput(session.user.user_metadata?.username || emailToUsername(session.user.email));
+                if (resolved) {
+                    gameState.currentUser = resolved;
+                    localStorage.setItem(LAST_USERNAME_KEY, resolved);
+                }
+            } else {
+                gameState.currentUser = null;
+            }
+        } catch (err) {
             gameState.currentUser = null;
         }
         userAuth.updateUI();
