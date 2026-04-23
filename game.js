@@ -2222,7 +2222,6 @@ async function loadLeaderboardData(mode) {
             <div style="display:flex; align-items:center; gap:0.75rem;">
                 <span class="rank-tag">#${index + 1}</span>
                 <span class="player-name-tag">${safeUsername}</span>
-                <span class="diff-tag">${safeDifficulty}</span>
             </div>
             <div style="display:flex; align-items:center; gap:1rem;">
                 <span class="score-value">${formatPointsShort(entry.points || 0)} ${pointLabel}</span>
