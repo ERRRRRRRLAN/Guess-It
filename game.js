@@ -7,11 +7,31 @@ const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_U
 // GAME STATE
 // ============================================================
 let gameState = {
-    targetNumber: 0, maxLives: 0, currentLives: 0,
+    maxLives: 0, currentLives: 0,
     minRange: 1, maxRange: 100, history: [],
     difficulty: '', currentUser: null, mode: 'solo',
     wrongGuesses: 0,
 };
+
+// Obfuscated Engine to hide targets from browser console
+const GameEngine = (() => {
+    let _soloTarget = 0;
+    let _duelTarget = 0;
+    return {
+        setSoloTarget: (val) => { _soloTarget = val; },
+        checkSoloGuess: (guess) => {
+            if (guess === _soloTarget) return 0;
+            return guess < _soloTarget ? -1 : 1;
+        },
+        getSoloTarget: () => _soloTarget,
+        setDuelTarget: (val) => { _duelTarget = val; },
+        checkDuelGuess: (guess) => {
+            if (guess === _duelTarget) return 0;
+            return guess < _duelTarget ? -1 : 1;
+        },
+        getDuelTarget: () => _duelTarget
+    };
+})();
 
 const DEBUG_MODE = ['localhost', '127.0.0.1'].includes(window.location.hostname);
 
@@ -865,9 +885,9 @@ function startGame(level) {
     gameState = {
         difficulty: level, maxRange: config.max, minRange: 1,
         maxLives: config.lives, currentLives: config.lives,
-        targetNumber: Math.floor(Math.random() * config.max) + 1,
         history: [], currentUser: user, mode: 'solo', wrongGuesses: 0,
     };
+    GameEngine.setSoloTarget(Math.floor(Math.random() * config.max) + 1);
     updateStatsUI();
     renderHearts('hearts-container', config.lives);
     document.getElementById('history-list').innerHTML = '';
@@ -908,7 +928,8 @@ function checkGuess() {
     gameState.history.push(guess);
     updateHistoryUI(guess, 'history-list');
 
-    if (guess === gameState.targetNumber) {
+    const checkRes = GameEngine.checkSoloGuess(guess);
+    if (checkRes === 0) {
         const elapsed = stopTimer(soloTimer);
         const sp = calcPoints(elapsed, gameState.wrongGuesses, gameState.difficulty);
         triggerFlash('flash-cyan'); triggerGlobalGlitch(400, 'success');
@@ -930,7 +951,7 @@ function checkGuess() {
         } else {
             playSFX('wrong');
             let hint;
-            if (guess < gameState.targetNumber) {
+            if (checkRes === -1) {
                 gameState.minRange = Math.max(gameState.minRange, guess + 1);
                 hint = `&gt; TERLALU_RENDAH: TEBAK_${gameState.minRange}_KE_${gameState.maxRange}`;
             } else {
@@ -958,8 +979,8 @@ function updateHistoryUI(guess, listId) {
 function showSoloResult(isWin, timeSec, points) {
     const content = document.getElementById('result-content');
     const subText = isWin
-        ? `Kamu hebat! Angkanya adalah: ${gameState.targetNumber}`
-        : `Sayang sekali. Angkanya adalah: ${gameState.targetNumber}`;
+        ? `Kamu hebat! Angkanya adalah: ${GameEngine.getSoloTarget()}`
+        : `Sayang sekali. Angkanya adalah: ${GameEngine.getSoloTarget()}`;
     let extraInfo = "";
     if (isWin) {
         const attempts = gameState.history.length;
@@ -1149,7 +1170,6 @@ function cleanupMatchmaking() {
 let duel = {
     room: null,
     myRole: null,       // 'player1' or 'player2'
-    myTarget: 0,
     oppName: '',
     lives: 0, maxLives: 0, min: 1, max: 100,
     history: [], wrong: 0, done: false,
@@ -1239,7 +1259,6 @@ function joinDuelRoom(room, restoreSnapshot = null) {
     duel = {
         room: room,
         myRole: isP1 ? 'player1' : 'player2',
-        myTarget: isP1 ? room.target1 : room.target2,
         oppName: isP1 ? room.player2 : room.player1,
         lives: config.lives, maxLives: config.lives,
         min: 1, max: config.max,
@@ -1263,9 +1282,11 @@ function joinDuelRoom(room, restoreSnapshot = null) {
         oppOfflineDeadline: 0,
         oppOfflineInterval: null,
     };
+    GameEngine.setDuelTarget(isP1 ? room.target1 : room.target2);
+
 
     if (restore && restore.difficulty === room.difficulty && restore.oppName === duel.oppName && restore.myRole === duel.myRole) {
-        duel.myTarget = restore.myTarget || duel.myTarget;
+        if (restore.myTarget) GameEngine.setDuelTarget(restore.myTarget);
         duel.lives = restore.lives ?? duel.lives;
         duel.maxLives = restore.maxLives ?? duel.maxLives;
         duel.min = restore.min ?? duel.min;
@@ -1416,7 +1437,8 @@ function submitDuelGuess() {
     updateHistoryUI(guess, 'history-my');
     persistDuelState();
 
-    if (guess === duel.myTarget) {
+    const checkRes = GameEngine.checkDuelGuess(guess);
+    if (checkRes === 0) {
         // ROUND WIN (Success)
         duel.roundOver = true;
         duel.roundWon = true; 
@@ -1480,7 +1502,7 @@ function submitDuelGuess() {
 
         playSFX('wrong');
         let feedbackText;
-        if (guess < duel.myTarget) {
+        if (checkRes === -1) {
             duel.min = Math.max(duel.min, guess + 1);
             feedbackText = `&gt; RENDAH: ${duel.min}-${duel.max}`;
         } else {
@@ -1572,7 +1594,7 @@ function handleOpponentBroadcast(data) {
     }
 
     if (safeData.next_round_sync) {
-        duel.myTarget = duel.myRole === 'player1' ? safeData.target1 : safeData.target2;
+        GameEngine.setDuelTarget(duel.myRole === 'player1' ? safeData.target1 : safeData.target2);
         duel.oppTarget = duel.myRole === 'player1' ? safeData.target2 : safeData.target1;
         startNextRound();
         persistDuelState();
@@ -1711,7 +1733,7 @@ function prepareNextRound() {
                 target2: target2
             });
             
-            duel.myTarget = target1;
+            GameEngine.setDuelTarget(target1);
             startNextRound();
         }
     }, 2000);
