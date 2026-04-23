@@ -1127,8 +1127,13 @@ async function cancelMatchmaking() {
     }
     cleanupMatchmaking();
     setMode('duel');
-    history.replaceState({ pageId: 'page-difficulty' }, '', '#page-difficulty');
-    showPage('page-difficulty', true);
+    
+    if (history.length > 1) {
+        history.back();
+    } else {
+        history.replaceState({ pageId: 'page-difficulty' }, '', '#page-difficulty');
+        showPage('page-difficulty', true);
+    }
 }
 
 function cleanupMatchmaking() {
