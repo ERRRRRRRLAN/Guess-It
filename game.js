@@ -2197,18 +2197,6 @@ function formatPointsShort(n) {
     return n.toString();
 }
 
-async function handleSaveScore(timeSec, points) {
-    const saveBtn = document.getElementById('save-score-btn');
-    const name = gameState.currentUser || '';
-    if (!name) return;
-    if (saveBtn) { saveBtn.disabled = true; saveBtn.innerText = "MENYIMPAN..."; }
-    
-    await GameEngine.saveScore(gameState.difficulty, gameState.history.length, name, 'solo', points, timeSec);
-    
-    if (saveBtn) saveBtn.innerText = "TERSIMPAN!";
-    triggerGlobalGlitch(300, 'success');
-}
-
 // ============================================================
 // LEADERBOARD
 // ============================================================
