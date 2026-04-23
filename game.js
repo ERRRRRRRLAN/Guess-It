@@ -874,7 +874,7 @@ function calcPoints(timeSec, wrongCount, difficulty) {
 // ============================================================
 let soloTimer = null;
 
-function startGame(level) {
+async function startGame(level) {
     if (gameState.mode === 'duel') {
         enterMatchmaking(level);
         return;
@@ -886,13 +886,31 @@ function startGame(level) {
         difficulty: level, maxRange: config.max, minRange: 1,
         maxLives: config.lives, currentLives: config.lives,
         history: [], currentUser: user, mode: 'solo', wrongGuesses: 0,
+        sessionId: null, finalTarget: 0
     };
-    GameEngine.setSoloTarget(Math.floor(Math.random() * config.max) + 1);
+    
     updateStatsUI();
     renderHearts('hearts-container', config.lives);
     document.getElementById('history-list').innerHTML = '';
     document.getElementById('stopwatch').innerText = '00:00.0';
     showPage('page-game');
+
+    if (user && supabaseClient) {
+        inputField.disabled = true;
+        setFeedback("MENGHUBUNGKAN KE SERVER...", false);
+        const { data: sessionId, error } = await supabaseClient.rpc('start_solo_game', { p_difficulty: level });
+        if (error || !sessionId) {
+            setFeedback("> ERROR SERVER", true);
+            return;
+        }
+        gameState.sessionId = sessionId;
+        inputField.disabled = false;
+        setFeedback("");
+        inputField.focus();
+    } else {
+        GameEngine.setSoloTarget(Math.floor(Math.random() * config.max) + 1);
+    }
+    
     soloTimer = startTimer('stopwatch');
 }
 
@@ -920,7 +938,7 @@ function updateStatsUI() {
     document.getElementById('high-display').innerText = gameState.maxRange;
 }
 
-function checkGuess() {
+async function checkGuess() {
     const guess = parseInt(inputField.value);
     if (isNaN(guess) || guess < gameState.minRange || guess > gameState.maxRange) {
         triggerFlash('flash-red'); setFeedback("ANGKA_LUAR_BATAS", true); return;
@@ -928,38 +946,82 @@ function checkGuess() {
     gameState.history.push(guess);
     updateHistoryUI(guess, 'history-list');
 
-    const checkRes = GameEngine.checkSoloGuess(guess);
-    if (checkRes === 0) {
-        const elapsed = stopTimer(soloTimer);
-        const sp = calcPoints(elapsed, gameState.wrongGuesses, gameState.difficulty);
-        triggerFlash('flash-cyan'); triggerGlobalGlitch(400, 'success');
-
-        // Auto-save SP for logged-in users
-        if (gameState.currentUser) {
-            saveScore(gameState.difficulty, gameState.history.length, gameState.currentUser, 'solo', sp, Math.round(elapsed));
+    if (gameState.sessionId) {
+        // SERVER AUTHORITATIVE
+        inputField.disabled = true;
+        const { data: res, error } = await supabaseClient.rpc('submit_solo_guess', {
+            p_session_id: gameState.sessionId,
+            p_guess: guess
+        });
+        
+        if (error || !res || res.error) {
+            triggerFlash('flash-red'); setFeedback("ERROR KONEKSI SERVER", true);
+            inputField.disabled = false;
+            return;
         }
-        playSFX('win');
-        showSoloResult(true, elapsed, sp);
-    } else {
-        gameState.currentLives--; gameState.wrongGuesses++;
-        updateHeartsUI('hearts-container', gameState.currentLives);
-        triggerFlash('flash-red'); triggerGlobalGlitch(250, 'error');
-        if (gameState.currentLives <= 0) {
-            const elapsed = stopTimer(soloTimer);
+
+        if (res.status === 'correct') {
+            stopTimer(soloTimer);
+            triggerFlash('flash-cyan'); triggerGlobalGlitch(400, 'success');
+            playSFX('win');
+            gameState.finalTarget = guess;
+            showSoloResult(true, res.timeSec, res.points);
+        } else if (res.status === 'lose') {
+            stopTimer(soloTimer);
+            gameState.currentLives = 0; gameState.wrongGuesses++;
+            updateHeartsUI('hearts-container', 0);
+            triggerFlash('flash-red'); triggerGlobalGlitch(250, 'error');
             playSFX('lose');
-            showSoloResult(false, elapsed, 0);
+            gameState.finalTarget = res.target;
+            showSoloResult(false, res.timeSec || 0, 0);
         } else {
+            inputField.disabled = false;
+            gameState.currentLives = res.lives; gameState.wrongGuesses++;
+            updateHeartsUI('hearts-container', gameState.currentLives);
+            triggerFlash('flash-red'); triggerGlobalGlitch(250, 'error');
             playSFX('wrong');
-            let hint;
-            if (checkRes === -1) {
-                gameState.minRange = Math.max(gameState.minRange, guess + 1);
-                hint = `&gt; TERLALU_RENDAH: TEBAK_${gameState.minRange}_KE_${gameState.maxRange}`;
-            } else {
-                gameState.maxRange = Math.min(gameState.maxRange, guess - 1);
-                hint = `&gt; TERLALU_TINGGI: TEBAK_${gameState.minRange}_KE_${gameState.maxRange}`;
-            }
+            
+            gameState.minRange = res.min;
+            gameState.maxRange = res.max;
+            let hint = res.status === 'too_low' 
+                ? `&gt; TERLALU_RENDAH: TEBAK_${res.min}_KE_${res.max}`
+                : `&gt; TERLALU_TINGGI: TEBAK_${res.min}_KE_${res.max}`;
+            
             updateStatsUI(); setFeedback(hint, true);
             inputField.value = ''; inputField.focus();
+        }
+    } else {
+        // LOCAL FALLBACK (GUEST)
+        const checkRes = GameEngine.checkSoloGuess(guess);
+        if (checkRes === 0) {
+            const elapsed = stopTimer(soloTimer);
+            const sp = calcPoints(elapsed, gameState.wrongGuesses, gameState.difficulty);
+            triggerFlash('flash-cyan'); triggerGlobalGlitch(400, 'success');
+            playSFX('win');
+            gameState.finalTarget = GameEngine.getSoloTarget();
+            showSoloResult(true, elapsed, sp);
+        } else {
+            gameState.currentLives--; gameState.wrongGuesses++;
+            updateHeartsUI('hearts-container', gameState.currentLives);
+            triggerFlash('flash-red'); triggerGlobalGlitch(250, 'error');
+            if (gameState.currentLives <= 0) {
+                const elapsed = stopTimer(soloTimer);
+                playSFX('lose');
+                gameState.finalTarget = GameEngine.getSoloTarget();
+                showSoloResult(false, elapsed, 0);
+            } else {
+                playSFX('wrong');
+                let hint;
+                if (checkRes === -1) {
+                    gameState.minRange = Math.max(gameState.minRange, guess + 1);
+                    hint = `&gt; TERLALU_RENDAH: TEBAK_${gameState.minRange}_KE_${gameState.maxRange}`;
+                } else {
+                    gameState.maxRange = Math.min(gameState.maxRange, guess - 1);
+                    hint = `&gt; TERLALU_TINGGI: TEBAK_${gameState.minRange}_KE_${gameState.maxRange}`;
+                }
+                updateStatsUI(); setFeedback(hint, true);
+                inputField.value = ''; inputField.focus();
+            }
         }
     }
 }
@@ -979,8 +1041,8 @@ function updateHistoryUI(guess, listId) {
 function showSoloResult(isWin, timeSec, points) {
     const content = document.getElementById('result-content');
     const subText = isWin
-        ? `Kamu hebat! Angkanya adalah: ${GameEngine.getSoloTarget()}`
-        : `Sayang sekali. Angkanya adalah: ${GameEngine.getSoloTarget()}`;
+        ? `Kamu hebat! Angkanya adalah: ${gameState.finalTarget}`
+        : `Sayang sekali. Angkanya adalah: ${gameState.finalTarget}`;
     let extraInfo = "";
     if (isWin) {
         const attempts = gameState.history.length;
@@ -1389,7 +1451,13 @@ function joinDuelRoom(room, restoreSnapshot = null) {
     })
         .on('presence', { event: 'sync' }, () => {
             const state = duel.channel.presenceState();
-            const oppOnline = !!(state[duel.oppName] && state[duel.oppName].length);
+            let oppOnline = false;
+            for (const key in state) {
+                if (key.toLowerCase() === duel.oppName.toLowerCase() && state[key].length > 0) {
+                    oppOnline = true;
+                    break;
+                }
+            }
             if (!oppOnline) {
                 startOpponentOfflineCountdown();
             } else {
