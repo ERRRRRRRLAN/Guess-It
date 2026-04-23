@@ -1,14 +1,7 @@
 // Supabase Configuration
 const SUPABASE_URL = 'https://tmysejqzjrbxcvmtsyup.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRteXNlanF6anJieGN2bXRzeXVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4ODYwNTEsImV4cCI6MjA5MjQ2MjA1MX0.5Lb-FWveCGGWlFbB8Ku_rLET6ja07zmpXKWe9yG497k';
-const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-    auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true,
-        storageKey: 'guess-it-auth-token'
-    }
-}) : null;
+const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 // ============================================================
 // GAME STATE
@@ -177,8 +170,8 @@ const AUTH_EMAIL_DOMAIN = 'example.com';
 const LEGACY_AUTH_EMAIL_DOMAINS = ['guessit.local'];
 const USERNAME_REGEX = /^[a-z0-9_]{3,15}$/;
 const LAST_USERNAME_KEY = 'guess_it_last_username';
-const AUTH_SIGNUP_TIMEOUT_MS = 8000;
-const AUTH_LOGIN_TIMEOUT_MS = 6000;
+const AUTH_SIGNUP_TIMEOUT_MS = 10000;
+const AUTH_LOGIN_TIMEOUT_MS = 10000;
 const REGISTER_LOGIN_RETRY_MS = [250, 500, 900];
 
 let lastRegisteredCredentials = null;
@@ -211,16 +204,14 @@ function emailToUsername(email) {
 }
 
 function mapAuthErrorMessage(error) {
-    const msg = String(error?.message || '').toLowerCase();
+    const msg = String(error?.message || error || '').toLowerCase();
     if (!msg) return '> LOGIN GAGAL';
     if (msg.includes('timeout')) return '> SERVER AUTH LAMBAT, COBA LAGI.';
     if (msg.includes('network') || msg.includes('failed to fetch')) return '> KONEKSI INTERNET TIDAK STABIL.';
-    if (msg.includes('email not confirmed')) {
-        return '> EMAIL BELUM TERVERIFIKASI. MATIKAN EMAIL CONFIRMATION DI SUPABASE AUTH ATAU VERIFIKASI EMAIL USER.';
-    }
     if (msg.includes('invalid login credentials')) return '> DATA SALAH';
+    if (msg.includes('username already registered') || msg.includes('username sudah terdaftar')) return '> USERNAME SUDAH TERDAFTAR';
     if (msg.includes('user already registered')) return '> USERNAME SUDAH TERDAFTAR';
-    if (msg.includes('signup is disabled')) return '> SIGNUP SEDANG DINONAKTIFKAN DI SUPABASE AUTH';
+    if (msg.includes('signup is disabled')) return '> SIGNUP SEDANG DINONAKTIFKAN';
     return `> ERROR AUTH: ${String(error.message).toUpperCase()}`;
 }
 
@@ -235,29 +226,33 @@ function setAuthFeedback(scope, msg, isError = true) {
     el.style.color = isError ? 'var(--accent-red)' : 'var(--neon-cyan)';
 }
 
-async function signInByUsernameAndPassword(username, password, options = {}) {
-    const includeLegacy = options.includeLegacy !== false;
-    const timeoutMs = Number.isFinite(options.timeoutMs) ? options.timeoutMs : AUTH_LOGIN_TIMEOUT_MS;
-    const emails = includeLegacy ? usernameToAuthEmails(username) : [usernameToAuthEmail(username)];
-    let lastError = null;
-    for (const email of emails) {
-        try {
-            const { error } = await withTimeout(
-                supabaseClient.auth.signInWithPassword({ email, password }),
-                timeoutMs,
-                'AUTH REQUEST TIMEOUT'
-            );
-            if (!error) return { ok: true, error: null };
-            lastError = error;
-            const msg = String(error.message || '').toLowerCase();
-            if (!msg.includes('invalid login credentials')) break;
-        } catch (err) {
-            lastError = err;
-            const msg = String(err?.message || '').toLowerCase();
-            if (!msg.includes('timeout')) break;
+async function apiRequest(path, method = 'GET', body = null, timeoutMs = AUTH_LOGIN_TIMEOUT_MS) {
+    const promise = fetch(path, {
+        method,
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: body ? JSON.stringify(body) : undefined
+    }).then(async (res) => {
+        let payload = {};
+        try { payload = await res.json(); } catch (_) {}
+        if (!res.ok) {
+            const msg = payload?.error || payload?.message || `HTTP_${res.status}`;
+            throw new Error(msg);
         }
+        return payload;
+    });
+    return withTimeout(promise, timeoutMs, 'AUTH REQUEST TIMEOUT');
+}
+
+async function signInByUsernameAndPassword(username, password) {
+    try {
+        await apiRequest('/api/auth/login', 'POST', { username, password }, AUTH_LOGIN_TIMEOUT_MS);
+        return { ok: true, error: null };
+    } catch (error) {
+        return { ok: false, error };
     }
-    return { ok: false, error: lastError || new Error('LOGIN GAGAL') };
 }
 
 function isAuthTimeoutError(error) {
@@ -269,21 +264,11 @@ function wait(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function tryRecoverSession() {
-    if (!supabaseClient?.auth) return null;
-    try {
-        const { data, error } = await supabaseClient.auth.refreshSession();
-        if (error) return null;
-        return data?.session || null;
-    } catch (_) {
-        return null;
-    }
-}
-
 async function resolveAuthUsernameWithRetry(maxAttempts = 3, delayMs = 250) {
     for (let i = 0; i < maxAttempts; i++) {
         try {
-            const resolved = await getUsernameFromActiveSession();
+            const me = await apiRequest('/api/auth/me', 'GET', null, AUTH_LOGIN_TIMEOUT_MS);
+            const resolved = normalizeUsernameInput(me?.username || '');
             if (resolved) return resolved;
         } catch (_) {}
         if (i < maxAttempts - 1) await wait(delayMs);
@@ -342,29 +327,6 @@ function withTimeout(promise, timeoutMs, timeoutLabel = 'REQUEST TIMEOUT') {
     });
 }
 
-async function getUsernameFromActiveSession() {
-    if (!supabaseClient) return null;
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    let user = session?.user || null;
-    if (!user) {
-        const { data: userData } = await supabaseClient.auth.getUser();
-        user = userData?.user || null;
-    }
-    if (!user) return null;
-
-    const { data: profile } = await supabaseClient
-        .from('profiles')
-        .select('username')
-        .eq('id', user.id)
-        .maybeSingle();
-    if (profile?.username) return normalizeUsernameInput(profile.username);
-
-    const userMetaName = normalizeUsernameInput(user.user_metadata?.username || '');
-    if (userMetaName) return userMetaName;
-
-    return emailToUsername(user.email);
-}
-
 const userAuth = {
     register: async () => {
         if (!supabaseClient) { setFeedback("> SUPABASE CLIENT TIDAK TERSEDIA", true); return; }
@@ -379,31 +341,18 @@ const userAuth = {
         if (!regBtn) { setAuthFeedback('register', '> TOMBOL REGISTER TIDAK DITEMUKAN', true); return; }
         regBtn.disabled = true; regBtn.innerText = "PROSES...";
         try {
-            const email = usernameToAuthEmail(user);
             setAuthFeedback('register', '> MEMBUAT AKUN...', false);
-            const { data, error } = await withTimeout(
-                supabaseClient.auth.signUp({
-                    email,
-                    password: pass,
-                    options: { data: { username: user } }
-                }),
-                AUTH_SIGNUP_TIMEOUT_MS,
-                'AUTH REQUEST TIMEOUT'
-            );
-            if (error) {
-                const lower = String(error.message || '').toLowerCase();
-                if (lower.includes('already registered') || lower.includes('already been registered')) {
+            try {
+                await apiRequest('/api/auth/register', 'POST', { username: user, password: pass }, AUTH_SIGNUP_TIMEOUT_MS);
+            } catch (error) {
+                const lower = String(error?.message || '').toLowerCase();
+                if (lower.includes('already')) {
                     setAuthFeedback('register', '> USERNAME SUDAH TERDAFTAR. SILAKAN LOGIN.', true);
                     return;
                 }
                 setAuthFeedback('register', mapAuthErrorMessage(error), true);
                 return;
             }
-
-            if (data?.session) {
-                try { await supabaseClient.auth.signOut(); } catch (_) {}
-            }
-
             const loginUser = document.getElementById('login-user');
             const loginPass = document.getElementById('login-pass');
             if (loginUser) loginUser.value = user;
@@ -476,7 +425,7 @@ const userAuth = {
     },
     logout: async () => {
         try {
-            if (supabaseClient) await supabaseClient.auth.signOut();
+            await apiRequest('/api/auth/logout', 'POST', {}, AUTH_LOGIN_TIMEOUT_MS);
         } catch (err) {
             console.warn('[AUTH] signOut failed, forcing local logout:', err?.message || err);
         } finally {
@@ -491,11 +440,7 @@ const userAuth = {
     },
     checkSession: async () => {
         if (!supabaseClient) { gameState.currentUser = null; userAuth.updateUI(); return; }
-        const resolved = await resolveAuthUsernameWithRetry();
-        if (!resolved) {
-            await tryRecoverSession();
-        }
-        const resolvedAfterRefresh = resolved || await resolveAuthUsernameWithRetry(4, 300);
+        const resolvedAfterRefresh = await resolveAuthUsernameWithRetry(4, 250);
         if (resolvedAfterRefresh) {
             gameState.currentUser = resolvedAfterRefresh;
             localStorage.setItem(LAST_USERNAME_KEY, resolvedAfterRefresh);
@@ -604,37 +549,7 @@ document.addEventListener('DOMContentLoaded', () => {
     gameState.currentUser = null;
     userAuth.updateUI();
 
-    if (supabaseClient?.auth) {
-        supabaseClient.auth.onAuthStateChange(async (event, session) => {
-            if (!session?.user) {
-                // On refresh, auth state can briefly be null before storage lock/session recovery.
-                const recovered = await resolveAuthUsernameWithRetry(4, 250);
-                if (recovered) {
-                    gameState.currentUser = recovered;
-                    localStorage.setItem(LAST_USERNAME_KEY, recovered);
-                    userAuth.updateUI();
-                    return;
-                }
-                await tryRecoverSession();
-                const recoveredAfterRefresh = await resolveAuthUsernameWithRetry(4, 250);
-                if (recoveredAfterRefresh) {
-                    gameState.currentUser = recoveredAfterRefresh;
-                    localStorage.setItem(LAST_USERNAME_KEY, recoveredAfterRefresh);
-                    userAuth.updateUI();
-                    return;
-                }
-                // Only clear when truly signed out
-                if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
-                    gameState.currentUser = null;
-                    userAuth.updateUI();
-                }
-                return;
-            }
-            gameState.currentUser = await resolveAuthUsernameWithRetry(2, 200) || emailToUsername(session.user.email);
-            localStorage.setItem(LAST_USERNAME_KEY, gameState.currentUser);
-            userAuth.updateUI();
-        });
-    }
+    // No Supabase Auth listener: session handled via server-side cookie + /api/auth/me.
     initAuthEnterHandlers();
     initPresence();
     initBGM();
@@ -2082,7 +1997,7 @@ async function exitDuel() {
 // ============================================================
 const SCORE_RPC_SAVE = 'submit_score_secure';
 const SCORE_RPC_POINTS = 'get_my_points_secure';
-const ALLOW_LEGACY_SCORE_FALLBACK = DEBUG_MODE;
+const ALLOW_LEGACY_SCORE_FALLBACK = true;
 
 function isMissingRpcError(error) {
     const msg = String(error?.message || '').toLowerCase();
