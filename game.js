@@ -2397,3 +2397,16 @@ document.addEventListener('keypress', (e) => {
     else if (document.getElementById('duel-arena').style.display === 'block' && !duel.done) submitDuelGuess();
 });
 
+// Expose functions to window for obfuscator compatibility
+window['goBack'] = goBack;
+window['toggleBGM'] = toggleBGM;
+window['userAuth'] = userAuth;
+window['selectMode'] = selectMode;
+window['showPage'] = showPage;
+window['showLeaderboard'] = typeof showLeaderboard !== 'undefined' ? showLeaderboard : () => {};
+window['cancelMatchmaking'] = cancelMatchmaking;
+window['checkGuess'] = checkGuess;
+window['switchLeaderboardTab'] = typeof switchLeaderboardTab !== 'undefined' ? switchLeaderboardTab : () => {};
+window['exitDuel'] = typeof exitDuel !== 'undefined' ? exitDuel : () => {};
+window['submitDuelGuess'] = typeof submitDuelGuess !== 'undefined' ? submitDuelGuess : () => {};
+window['startGame'] = startGame;
