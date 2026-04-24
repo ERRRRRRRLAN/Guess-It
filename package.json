@@ -5,7 +5,7 @@
   "main": "game.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "javascript-obfuscator game.js --output game.js --compact true --control-flow-flattening true --dead-code-injection true --debug-protection true --disable-console-output false --identifier-names-generator hexadecimal --rename-globals false --string-array true --string-array-encoding base64 --string-array-threshold 0.75"
+    "build": "mkdir -p public && cp *.html *.css *.js *.md *.mp3 public/ 2>/dev/null || true && javascript-obfuscator public/game.js --output public/game.js --compact true --control-flow-flattening true --dead-code-injection true --debug-protection true --disable-console-output false --identifier-names-generator hexadecimal --rename-globals false --string-array true --string-array-encoding base64 --string-array-threshold 0.75"
   },
   "repository": {
     "type": "git",
